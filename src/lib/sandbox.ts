@@ -57,6 +57,24 @@ function safeOrigin(siteUrl: string) {
   }
 }
 
+/**
+ * 이 사이트의 기준 주소. 제출 게임에 주입할 SDK 경로를 만드는 데 씁니다.
+ *
+ * 우선순위대로 찾습니다.
+ *   1) NEXT_PUBLIC_SITE_URL      — 직접 지정한 값 (커스텀 도메인이 있으면 이걸 쓰세요)
+ *   2) VERCEL_PROJECT_PRODUCTION_URL — Vercel 이 알려주는 운영 도메인
+ *   3) VERCEL_URL                — 이번 배포에만 붙은 임시 주소 (미리보기 배포용)
+ *   4) localhost
+ *
+ * 2·3번 덕분에 Vercel 에 배포할 때 주소를 손으로 넣지 않아도 동작합니다.
+ */
 export function siteUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL;
+  if (explicit) return explicit.replace(/\/+$/, "");
+
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (vercelHost) return `https://${vercelHost}`;
+
+  return "http://localhost:3000";
 }
