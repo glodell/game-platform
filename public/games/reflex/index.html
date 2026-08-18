@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>반응속도 테스트</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #e7e9f7;
+    user-select: none;
+  }
+  #stage {
+    height: 100%;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 24px;
+    background: #171b31;
+    transition: background 120ms;
+    cursor: pointer;
+  }
+  #stage.wait  { background: #7a1f3d; }
+  #stage.go    { background: #1f7a4a; }
+  #stage.ready { background: #171b31; }
+  #stage.fail  { background: #5a1a1a; }
+  h1 { font-size: clamp(22px, 6vw, 34px); margin: 0 0 10px; font-weight: 900; letter-spacing: -0.02em; }
+  p  { margin: 0; font-size: clamp(13px, 3.4vw, 16px); opacity: 0.75; line-height: 1.6; }
+  #rounds {
+    position: absolute; top: 14px; right: 16px;
+    font-size: 13px; opacity: 0.6; font-variant-numeric: tabular-nums;
+  }
+  .big { font-size: clamp(40px, 12vw, 72px); font-weight: 900; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+  <div id="stage" class="ready">
+    <div>
+      <h1 id="title">반응속도 테스트</h1>
+      <p id="hint">화면을 눌러 시작하세요<br>초록으로 바뀌는 순간 바로 누르면 됩니다 (5회 평균)</p>
+    </div>
+  </div>
+  <div id="rounds"></div>
+
+<script src="/sdk/arcade.js"></script>
+<script>
+(function () {
+  var stage  = document.getElementById("stage");
+  var title  = document.getElementById("title");
+  var hint   = document.getElementById("hint");
+  var rounds = document.getElementById("rounds");
+
+  var TOTAL = 5;
+  var state = "ready";      // ready | wait | go | result | done
+  var times = [];
+  var timer = null;
+  var greenAt = 0;
+
+  Arcade.ready(function (config) {
+    hint.innerHTML = config.player.name + "님, 화면을 눌러 시작하세요<br>초록으로 바뀌는 순간 바로 누르면 됩니다 (5회 평균)";
+  });
+
+  function setStage(cls) { stage.className = cls; }
+
+  function beginRound() {
+    state = "wait";
+    setStage("wait");
+    title.textContent = "기다리세요…";
+    hint.textContent = "초록으로 바뀌면 바로 누르기";
+    rounds.textContent = (times.length + 1) + " / " + TOTAL;
+
+    var delay = 1200 + Math.random() * 2600;
+    timer = setTimeout(function () {
+      state = "go";
+      setStage("go");
+      title.textContent = "지금!";
+      hint.textContent = "";
+      greenAt = performance.now();
+    }, delay);
+  }
+
+  function finishRound(ms) {
+    times.push(ms);
+    state = "result";
+    setStage("ready");
+    title.innerHTML = '<span class="big">' + Math.round(ms) + '</span> ms';
+
+    if (times.length >= TOTAL) {
+      var avg = times.reduce(function (a, b) { return a + b; }, 0) / times.length;
+      hint.textContent = "5회 평균 " + Math.round(avg) + "ms — 기록을 제출했습니다";
+      rounds.textContent = "";
+      state = "done";
+      Arcade.gameOver(Math.round(avg), { attempts: times.map(Math.round) });
+    } else {
+      hint.textContent = "눌러서 다음 라운드";
+    }
+  }
+
+  function onPress() {
+    if (state === "ready" || state === "done") {
+      times = [];
+      Arcade.start();
+      beginRound();
+      return;
+    }
+
+    if (state === "wait") {
+      // 초록 전에 누름 — 이번 라운드는 페널티
+      clearTimeout(timer);
+      state = "result";
+      setStage("fail");
+      title.textContent = "너무 빨랐어요";
+      hint.textContent = "눌러서 이 라운드 다시";
+      return;
+    }
+
+    if (state === "go") {
+      finishRound(performance.now() - greenAt);
+      return;
+    }
+
+    if (state === "result") {
+      beginRound();
+      return;
+    }
+  }
+
+  stage.addEventListener("pointerdown", function (e) { e.preventDefault(); onPress(); });
+  window.addEventListener("keydown", function (e) {
+    if (e.code === "Space") { e.preventDefault(); onPress(); }
+  });
+})();
+</script>
+</body>
+</html>

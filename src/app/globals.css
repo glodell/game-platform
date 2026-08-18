@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #07080f;
+  --color-ink-900: #0c0e1a;
+  --color-ink-850: #111426;
+  --color-ink-800: #171b31;
+  --color-ink-700: #232845;
+  --color-ink-600: #333a5e;
+  --color-ink-400: #7b83ad;
+  --color-ink-300: #a6adcd;
+  --color-ink-100: #e7e9f7;
+
+  --color-neon-400: #5ce1ff;
+  --color-neon-500: #22c9f5;
+  --color-punch-400: #ff5c9a;
+  --color-punch-500: #ff2d78;
+  --color-lime-glow: #b6ff3c;
+  --color-gold: #ffcc4d;
+  --color-silver: #d3dbe8;
+  --color-bronze: #d99457;
+
+  --font-display: "Pretendard", "Apple SD Gothic Neo", "Segoe UI", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-image:
+    radial-gradient(900px 500px at 12% -10%, rgba(34, 201, 245, 0.16), transparent 62%),
+    radial-gradient(760px 460px at 92% 0%, rgba(255, 45, 120, 0.14), transparent 58%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: var(--color-neon-500);
+  color: var(--color-ink-950);
+}
+
+/* 얇은 스크롤바 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+
+@utility panel {
+  background: color-mix(in oklab, var(--color-ink-900) 82%, transparent);
+  border: 1px solid var(--color-ink-700);
+  border-radius: 1rem;
+  backdrop-filter: blur(8px);
+}
+
+@utility glow-ring {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-neon-400) 35%, transparent),
+    0 0 28px -6px color-mix(in oklab, var(--color-neon-400) 45%, transparent);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+.live-dot {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}

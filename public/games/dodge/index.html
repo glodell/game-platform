@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>운석 피하기</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07080f; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #e7e9f7; user-select: none; }
+  #wrap { position: relative; height: 100%; display: grid; place-items: center; }
+  canvas { display: block; touch-action: none; cursor: none; }
+  #overlay {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    text-align: center; padding: 24px; background: rgba(7,8,15,0.82);
+    backdrop-filter: blur(3px);
+  }
+  #overlay.hidden { display: none; }
+  h1 { font-size: clamp(22px, 6vw, 32px); margin: 0 0 8px; font-weight: 900; letter-spacing: -0.02em; }
+  p { margin: 0; font-size: clamp(13px, 3.4vw, 15px); opacity: 0.7; line-height: 1.7; }
+  button {
+    margin-top: 18px; border: 0; border-radius: 14px; cursor: pointer;
+    padding: 14px 28px; font-size: 16px; font-weight: 800;
+    background: #5ce1ff; color: #07080f;
+  }
+  .score { font-size: clamp(38px, 11vw, 60px); font-weight: 900; font-variant-numeric: tabular-nums; color: #b6ff3c; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="overlay">
+    <div>
+      <h1 id="title">운석 피하기</h1>
+      <p id="hint">좌우로 움직여 운석을 피하세요<br>마우스·터치로 조종, 키보드는 ← → 또는 A D</p>
+      <button id="go">시작</button>
+    </div>
+  </div>
+</div>
+
+<script src="/sdk/arcade.js"></script>
+<script>
+(function () {
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var overlay = document.getElementById("overlay");
+  var titleEl = document.getElementById("title");
+  var hintEl = document.getElementById("hint");
+  var goBtn = document.getElementById("go");
+
+  var W = 0, H = 0, DPR = 1;
+  var running = false;
+  var ship, rocks, stars, score, elapsed, spawnTimer, lastFrame, keys = {};
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    // 세로가 긴 화면에서도 플레이가 되도록 4:3 비율 안쪽으로 맞춥니다.
+    var maxW = window.innerWidth, maxH = window.innerHeight;
+    W = Math.min(maxW, maxH * 0.75);
+    H = maxH;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    makeStars();
+  }
+
+  function makeStars() {
+    stars = [];
+    for (var i = 0; i < 60; i++) {
+      stars.push({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.6 + 0.4 });
+    }
+  }
+
+  function reset() {
+    ship = { x: W / 2, y: H - 70, r: 14 };
+    rocks = [];
+    score = 0;
+    elapsed = 0;
+    spawnTimer = 0;
+    keys = {};
+  }
+
+  function start() {
+    resize();
+    reset();
+    overlay.classList.add("hidden");
+    running = true;
+    lastFrame = performance.now();
+    Arcade.start();
+    requestAnimationFrame(loop);
+  }
+
+  function end() {
+    running = false;
+    var final = Math.round(score);
+    titleEl.innerHTML = '<span class="score">' + final.toLocaleString("ko-KR") + '</span>';
+    hintEl.textContent = Math.floor(elapsed / 1000) + "초 생존 — 기록을 제출했습니다";
+    goBtn.textContent = "다시 하기";
+    overlay.classList.remove("hidden");
+    Arcade.gameOver(final, { survivedMs: Math.round(elapsed) });
+  }
+
+  function spawnRock() {
+    var size = 12 + Math.random() * 22;
+    rocks.push({
+      x: size + Math.random() * (W - size * 2),
+      y: -size,
+      r: size,
+      vy: 120 + Math.random() * 90 + elapsed / 90,
+      vx: (Math.random() - 0.5) * 60,
+      spin: (Math.random() - 0.5) * 3,
+      a: Math.random() * Math.PI
+    });
+  }
+
+  function loop(now) {
+    if (!running) return;
+    var dt = Math.min((now - lastFrame) / 1000, 0.05);
+    lastFrame = now;
+    elapsed += dt * 1000;
+
+    // 조종 (키보드)
+    var speed = 340;
+    if (keys.left) ship.x -= speed * dt;
+    if (keys.right) ship.x += speed * dt;
+    ship.x = Math.max(ship.r, Math.min(W - ship.r, ship.x));
+
+    // 운석 생성 — 시간이 지날수록 빨라짐
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) {
+      spawnRock();
+      spawnTimer = Math.max(0.16, 0.62 - elapsed / 42000);
+    }
+
+    // 갱신 + 충돌
+    for (var i = rocks.length - 1; i >= 0; i--) {
+      var r = rocks[i];
+      r.y += r.vy * dt;
+      r.x += r.vx * dt;
+      r.a += r.spin * dt;
+      if (r.x < r.r || r.x > W - r.r) r.vx *= -1;
+
+      var dx = r.x - ship.x, dy = r.y - ship.y;
+      if (dx * dx + dy * dy < (r.r + ship.r * 0.72) * (r.r + ship.r * 0.72)) {
+        return end();
+      }
+      if (r.y - r.r > H) {
+        rocks.splice(i, 1);
+        score += 25;
+      }
+    }
+
+    score += dt * 30;
+    Arcade.progress(Math.round(score));
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // 배경 별
+    ctx.fillStyle = "#12162a";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "rgba(231,233,247,0.45)";
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      s.y += (10 + s.s * 18) * 0.016;
+      if (s.y > H) { s.y = -2; s.x = Math.random() * W; }
+      ctx.fillRect(s.x, s.y, s.s, s.s);
+    }
+
+    // 운석
+    for (var j = 0; j < rocks.length; j++) {
+      var r = rocks[j];
+      ctx.save();
+      ctx.translate(r.x, r.y);
+      ctx.rotate(r.a);
+      ctx.fillStyle = "#ff5c9a";
+      ctx.beginPath();
+      for (var k = 0; k < 7; k++) {
+        var ang = (k / 7) * Math.PI * 2;
+        var rad = r.r * (0.78 + ((k * 37) % 10) / 40);
+        ctx[k === 0 ? "moveTo" : "lineTo"](Math.cos(ang) * rad, Math.sin(ang) * rad);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 우주선
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
+    ctx.fillStyle = "#5ce1ff";
+    ctx.beginPath();
+    ctx.moveTo(0, -ship.r);
+    ctx.lineTo(ship.r * 0.85, ship.r * 0.8);
+    ctx.lineTo(0, ship.r * 0.4);
+    ctx.lineTo(-ship.r * 0.85, ship.r * 0.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 입력
+  function movePointer(e) {
+    if (!running) return;
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    ship.x = Math.max(ship.r, Math.min(W - ship.r, x));
+  }
+  canvas.addEventListener("pointermove", movePointer);
+  canvas.addEventListener("pointerdown", movePointer);
+
+  window.addEventListener("keydown", function (e) {
+    if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = true;
+    if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = true;
+    if (e.code === "Space" && !running) { e.preventDefault(); start(); }
+  });
+  window.addEventListener("keyup", function (e) {
+    if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = false;
+    if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = false;
+  });
+
+  goBtn.addEventListener("click", start);
+  window.addEventListener("resize", function () { if (!running) resize(); });
+
+  Arcade.ready(function (config) {
+    hintEl.innerHTML = config.player.name + "님, 좌우로 움직여 운석을 피하세요<br>마우스·터치로 조종, 키보드는 ← → 또는 A D";
+  });
+
+  resize();
+})();
+</script>
+</body>
+</html>

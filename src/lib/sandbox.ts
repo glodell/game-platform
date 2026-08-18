@@ -1,0 +1,62 @@
+/**
+ * 구독자가 제출한 HTML을 iframe 안에서 안전하게 띄우기 위한 래핑.
+ *
+ * 방어의 핵심은 iframe 의 sandbox 속성입니다. allow-same-origin 을 절대 주지 않기 때문에
+ * 게임 코드는 고유(opaque) 오리진에서 실행되고, 우리 쿠키·localStorage·DOM 에 접근할 수 없습니다.
+ * 여기서 추가로 하는 일은 네트워크 요청과 폼 전송을 CSP 로 한 번 더 잠그는 것입니다.
+ */
+
+export const GAME_SANDBOX = [
+  "allow-scripts",
+  "allow-pointer-lock",
+  "allow-orientation-lock",
+  "allow-modals",
+].join(" ");
+
+const CSP = [
+  "default-src 'none'",
+  "img-src data: blob:",
+  "media-src data: blob:",
+  "font-src data:",
+  "style-src 'unsafe-inline' data:",
+  "script-src 'unsafe-inline' 'unsafe-eval' SDK_ORIGIN",
+  "connect-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join("; ");
+
+export function wrapUserGame(html: string, siteUrl: string) {
+  const origin = safeOrigin(siteUrl);
+  const csp = CSP.replace("SDK_ORIGIN", origin);
+  const sdk = `${origin}/sdk/arcade.js`;
+
+  // 제출물이 완전한 문서든 조각이든 동작하도록 head 를 우리가 강제로 앞에 붙입니다.
+  const head = `<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
+<script src="${sdk}"></script>
+<style>html,body{margin:0;height:100%;background:#07080f;color:#e7e9f7;font-family:system-ui,sans-serif;overflow:hidden}</style>`;
+
+  const hasHtmlTag = /<html[\s>]/i.test(html);
+  if (!hasHtmlTag) {
+    return `<!doctype html><html lang="ko"><head>${head}</head><body>${html}</body></html>`;
+  }
+
+  // 이미 완전한 문서라면 </head> 또는 <body> 직전에 주입
+  if (/<head[\s>]/i.test(html)) {
+    return html.replace(/<head([^>]*)>/i, (m) => `${m}${head}`);
+  }
+  return html.replace(/<html([^>]*)>/i, (m) => `${m}<head>${head}</head>`);
+}
+
+function safeOrigin(siteUrl: string) {
+  try {
+    return new URL(siteUrl).origin;
+  } catch {
+    return "http://localhost:3000";
+  }
+}
+
+export function siteUrl() {
+  return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+}
