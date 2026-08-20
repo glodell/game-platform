@@ -18,11 +18,22 @@ export async function SiteHeader() {
     <header className="sticky top-0 z-50 border-b border-ink-800 bg-ink-950/80 backdrop-blur-md">
       <NavProgress />
       <div className="mx-auto max-w-6xl px-5 h-16 flex items-center gap-6">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="grid place-items-center size-8 rounded-lg bg-gradient-to-br from-neon-400 to-punch-500 text-ink-950 font-black text-lg">
-            A
-          </span>
-          <span className="font-black tracking-tight text-lg hidden sm:block">아케이드</span>
+        <Link href="/" aria-label="바이버후드 홈" className="flex items-center shrink-0">
+          {/* 좁은 화면에서는 게임기 마크만, sm 부터 워드마크까지 나오는 가로 로고 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/viberhood-mark-compact.svg"
+            alt=""
+            aria-hidden
+            className="h-8 w-auto sm:hidden"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/viberhood-logo.svg"
+            alt=""
+            aria-hidden
+            className="hidden sm:block h-9 w-auto"
+          />
         </Link>
 
         <nav className="flex items-center gap-1 text-sm overflow-x-auto">

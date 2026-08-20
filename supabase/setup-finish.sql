@@ -70,7 +70,7 @@ insert into public.hackathons
   (slug, title, theme, description, rules, starts_at, submit_ends_at, vote_ends_at, prizes, is_published)
 values (
   'arcade-hack-1',
-  '1회 아케이드 해커톤',
+  '1회 바이버후드 해커톤',
   '한 화면 안에서 끝나는 게임',
   E'AI를 써도 좋고, 직접 짜도 좋습니다. 중요한 건 "30초 안에 한 판이 끝나는가" 하나입니다.\n제출된 게임은 검토 후 플랫폼에 공개되고, 좋아요가 가장 많은 작품이 우승합니다.',
   E'- HTML 파일 하나로 제출 (외부 라이브러리·이미지 URL 금지)\n- Arcade.gameOver(점수) 를 반드시 호출할 것\n- 모바일 세로 화면에서도 플레이 가능할 것\n- 한 판이 30초 안에 끝날 것\n- 본인이 만든 코드일 것 (AI 사용은 허용)',

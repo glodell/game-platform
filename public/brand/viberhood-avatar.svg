@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" fill="none">
+<defs>
+    <linearGradient id="a-screen" x1="158" y1="205" x2="342" y2="307" gradientUnits="userSpaceOnUse"><stop offset="0.00%" stop-color="#FF3D6E"/><stop offset="16.67%" stop-color="#FF8A3D"/><stop offset="33.33%" stop-color="#FFD93D"/><stop offset="50.00%" stop-color="#3DE68A"/><stop offset="66.67%" stop-color="#35D6FF"/><stop offset="83.33%" stop-color="#5B7CFF"/><stop offset="100.00%" stop-color="#B45CFF"/></linearGradient>
+    <linearGradient id="a-rim" x1="60" y1="136" x2="452" y2="376" gradientUnits="userSpaceOnUse"><stop offset="0.00%" stop-color="#FF3D6E"/><stop offset="16.67%" stop-color="#FF8A3D"/><stop offset="33.33%" stop-color="#FFD93D"/><stop offset="50.00%" stop-color="#3DE68A"/><stop offset="66.67%" stop-color="#35D6FF"/><stop offset="83.33%" stop-color="#5B7CFF"/><stop offset="100.00%" stop-color="#B45CFF"/></linearGradient>
+    <linearGradient id="a-gloss" x1="170" y1="180" x2="300" y2="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="52%" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="a-blur" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter><linearGradient id="a-ring" x1="0" y1="0" x2="800" y2="800" gradientUnits="userSpaceOnUse"><stop offset="0.00%" stop-color="#FF3D6E"/><stop offset="16.67%" stop-color="#FF8A3D"/><stop offset="33.33%" stop-color="#FFD93D"/><stop offset="50.00%" stop-color="#3DE68A"/><stop offset="66.67%" stop-color="#35D6FF"/><stop offset="83.33%" stop-color="#5B7CFF"/><stop offset="100.00%" stop-color="#B45CFF"/></linearGradient><radialGradient id="a-bg" cx="50%" cy="30%" r="80%">
+       <stop offset="0%" stop-color="#141935"/>
+       <stop offset="100%" stop-color="#07080F"/>
+     </radialGradient></defs>
+
+<rect width="800" height="800" rx="192" fill="url(#a-bg)"/>
+<rect x="16" y="16" width="768" height="768" rx="176" fill="none" stroke="url(#a-ring)" stroke-width="22.400000000000002" opacity="0.9"/>
+<g transform="translate(400 400) rotate(-9) scale(1.4) translate(-256 -256)"><g filter="url(#a-blur)" opacity="0.75">
+         <rect x="61" y="141" width="390" height="230" rx="62" fill="none" stroke="url(#a-rim)" stroke-width="18"/>
+         <rect x="160" y="176" width="180" height="160" rx="26" fill="url(#a-screen)"/>
+       </g>
+    <rect x="56" y="136" width="400" height="240" rx="66" fill="#151A34"/>
+    <rect x="61" y="141" width="390" height="230" rx="61" fill="none" stroke="url(#a-rim)" stroke-width="10"/>
+    <rect x="150" y="166" width="200" height="180" rx="34" fill="#080A15"/>
+    <rect x="160" y="176" width="180" height="160" rx="26" fill="url(#a-screen)"/>
+    <rect x="160" y="176" width="180" height="160" rx="26" fill="url(#a-gloss)"/>
+    <path d="M208 210 L250 300 L292 210" fill="none" stroke="#080A15" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#E7E9F7">
+      <rect x="75" y="244" width="72" height="24" rx="10"/>
+      <rect x="99" y="220" width="24" height="72" rx="10"/>
+    </g>
+    <circle cx="373" cy="288" r="20" fill="#FF3D6E"/>
+    <circle cx="417" cy="224" r="20" fill="#35D6FF"/>
+    <g fill="#2B3159">
+      <rect x="196" y="352" width="30" height="10" rx="5"/>
+      <rect x="240" y="352" width="30" height="10" rx="5"/>
+    </g></g>
+</svg>

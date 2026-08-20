@@ -1,9 +1,9 @@
-# 아케이드 — AI로 만든 게임 플랫폼
+# 바이버후드(Viberhood) — AI로 만든 게임 플랫폼
 
 **라이브: https://game-platform-dun.vercel.app**
 
-쇼츠에서 AI로 만든 게임을 모아두고, 구독자와 제한 시간 대결을 벌이고, 해커톤으로 구독자가 만든
-게임까지 받는 플랫폼입니다.
+**바이브코딩으로 노는 이웃들.** 쇼츠에서 AI로 만든 게임을 모아두고, 구독자와 제한 시간 대결을
+벌이고, 해커톤으로 구독자가 만든 게임까지 받는 플랫폼입니다.
 
 - **게임 허브** — 공식 게임과 구독자 제작 게임을 한 곳에서 골라 플레이
 - **대회** — 시작·마감 시각이 정해진 랭킹전. 마감 시점 1·2·3등에게 상품
@@ -168,6 +168,9 @@ src/
 public/
   sdk/arcade.js              게임이 불러가는 SDK
   games/                     기본 게임 (reflex, dodge)
+  brand/                     로고 · 마크 · 채널아트 (README.md 에 사용 규칙)
+scripts/
+  brand/build-brand.mjs      브랜드 애셋 생성기 (색·문구 고치고 다시 실행)
 supabase/
   schema.sql                 테이블 · 뷰 · 트리거 · RLS
   seed.sql                   샘플 데이터
@@ -175,7 +178,19 @@ supabase/
 
 ---
 
-## 7. 다음에 붙이면 좋은 것
+## 7. 브랜드 애셋
+
+로고 · 파비콘 · 유튜브 채널아트는 [`public/brand/`](public/brand/README.md) 에 있습니다. 색이나 문구를
+바꾸려면 [`scripts/brand/build-brand.mjs`](scripts/brand/build-brand.mjs) 를 고치고 다시 실행하면 SVG 와
+PNG 가 전부 재생성됩니다.
+
+```bash
+node scripts/brand/build-brand.mjs
+```
+
+---
+
+## 8. 다음에 붙이면 좋은 것
 
 - 대회 마감 시 자동 알림 / 수상자 발표 (Supabase Edge Function + cron)
 - 리플레이 기록 저장 (입력 시퀀스를 meta 에 남기면 상위권 검증이 쉬워집니다)

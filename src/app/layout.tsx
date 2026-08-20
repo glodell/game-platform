@@ -1,17 +1,41 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SetupGuide } from "@/components/setup-guide";
 import { isSupabaseConfigured } from "@/lib/env";
+import { siteUrl } from "@/lib/sandbox";
+
+const TITLE = "바이버후드 — AI로 만든 게임, 구독자와 대결";
+const DESCRIPTION =
+  "바이브코딩으로 노는 이웃들. 쇼츠에서 AI로 만든 게임을 모아놓고, 제한 시간 대회에서 랭킹을 다투고, 해커톤에 직접 만든 게임을 올리는 플랫폼입니다.";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl()),
+  applicationName: "바이버후드",
   title: {
-    default: "아케이드 — AI로 만든 게임, 구독자와 대결",
-    template: "%s · 아케이드",
+    default: TITLE,
+    template: "%s · 바이버후드",
   },
-  description:
-    "쇼츠에서 AI로 만든 게임을 모아놓은 플랫폼. 제한 시간 대회에서 랭킹을 다투고, 해커톤에 직접 만든 게임을 올리고, 서로의 게임에 좋아요와 피드백을 남겨보세요.",
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "바이버후드",
+    locale: "ko_KR",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [{ url: "/brand/viberhood-og.png", width: 1200, height: 630, alt: "바이버후드" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/brand/viberhood-og.png"],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#07080F",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="flex-1">{configured ? children : <SetupGuide />}</main>
         <footer className="border-t border-ink-800 mt-24">
           <div className="mx-auto max-w-6xl px-5 py-10 text-sm text-ink-400 flex flex-wrap gap-x-8 gap-y-3 justify-between">
-            <p>© {new Date().getFullYear()} 아케이드. AI로 만들고, 같이 노는 곳.</p>
+            <p>© {new Date().getFullYear()} 바이버후드. 바이브코딩으로 노는 이웃들.</p>
             <nav className="flex gap-5">
               <Link href="/games" className="hover:text-ink-100">게임</Link>
               <Link href="/tournaments" className="hover:text-ink-100">대회</Link>

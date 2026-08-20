@@ -255,7 +255,7 @@ function HackathonForm() {
       </p>
 
       <Row>
-        <Input name="title" label="해커톤 이름" required placeholder="예: 1회 아케이드 해커톤" />
+        <Input name="title" label="해커톤 이름" required placeholder="예: 1회 바이버후드 해커톤" />
         <Input name="slug" label="주소 슬러그" placeholder="비우면 자동 생성" />
       </Row>
 
