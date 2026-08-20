@@ -1,6 +1,6 @@
 # 바이버후드(Viberhood) — AI로 만든 게임 플랫폼
 
-**라이브: https://game-platform-dun.vercel.app**
+**라이브: https://viberhood.io**
 
 **바이브코딩으로 노는 이웃들.** 쇼츠에서 AI로 만든 게임을 모아두고, 구독자와 제한 시간 대결을
 벌이고, 해커톤으로 구독자가 만든 게임까지 받는 플랫폼입니다.
@@ -143,8 +143,14 @@ update profiles set role = 'owner' where handle = '내핸들';
 
 1. 저장소를 GitHub 에 올리고 Vercel 에서 import
 2. Environment Variables 에 `.env.local` 의 5개 값을 그대로 입력
-   (`NEXT_PUBLIC_SITE_URL` 은 실제 배포 도메인으로)
+   (`NEXT_PUBLIC_SITE_URL` 은 실제 배포 도메인 — 현재 `https://viberhood.io`)
 3. 배포 후 Supabase → Authentication → URL Configuration 에 배포 도메인 추가
+   - Site URL: `https://viberhood.io`
+   - Redirect URLs: `https://viberhood.io/**` (이걸 빼먹으면 구글 로그인이 튕깁니다)
+
+`NEXT_PUBLIC_SITE_URL` 은 빌드 시점에 코드로 박히므로, 값을 바꾼 뒤에는 반드시 Redeploy 하세요.
+커스텀 도메인은 apex(`viberhood.io`) 와 `www` 중 하나를 Vercel 의 Primary 로 정하고,
+`NEXT_PUBLIC_SITE_URL` 도 같은 쪽으로 맞춰야 리다이렉트가 한 번 더 도는 일이 없습니다.
 
 ---
 

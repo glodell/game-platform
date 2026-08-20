@@ -110,21 +110,21 @@ export default async function HomePage() {
 function Hero({ hasLive }: { hasLive: boolean }) {
   return (
     <section className="pt-16 sm:pt-24 pb-4">
-      <div className="max-w-3xl">
+      <div>
         {hasLive && (
           <div className="inline-flex items-center gap-2 rounded-full border border-punch-500/40 bg-punch-500/10 px-3 py-1 text-xs font-bold text-punch-400 mb-6">
             <span className="live-dot size-1.5 rounded-full bg-punch-400" />
             지금 대회가 열려 있습니다
           </div>
         )}
-        <h1 className="text-4xl sm:text-6xl font-black tracking-tighter leading-[1.05]">
-          AI로 만든 게임,
-          <br />
-          <span className="bg-gradient-to-r from-neon-400 to-punch-400 bg-clip-text text-transparent">
+        {/* 좁은 화면에서는 두 줄, lg 부터는 한 줄로 이어 붙입니다. */}
+        <h1 className="text-4xl sm:text-6xl lg:text-[3.5rem] xl:text-6xl font-black tracking-tighter leading-[1.05]">
+          <span className="block lg:inline">AI로 만든 게임,</span>{" "}
+          <span className="block lg:inline bg-gradient-to-r from-neon-400 to-punch-400 bg-clip-text text-transparent">
             구독자와 정면 대결.
           </span>
         </h1>
-        <p className="text-ink-300 mt-6 text-lg leading-relaxed">
+        <p className="text-ink-300 mt-6 text-lg leading-relaxed max-w-3xl">
           쇼츠에서 만든 게임이 여기 다 모여 있습니다. 제한 시간 안에 최고 기록을 남기고,
           해커톤에 직접 만든 게임을 올리고, 서로의 작품에 좋아요와 피드백을 남기세요.
         </p>
