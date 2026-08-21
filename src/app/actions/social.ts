@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { TOO_MANY, rateLimit } from "@/lib/rate-limit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -11,6 +12,11 @@ export async function toggleLike(gameId: string, slug: string): Promise<ActionRe
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다." };
+
+  // 좋아요 토글을 반복해 트리거로 like_count 를 흔드는 것을 막습니다.
+  if (!(await rateLimit(`like:${user.id}`, 30, 60))) {
+    return { ok: false, error: TOO_MANY };
+  }
 
   const { data: existing } = await supabase
     .from("likes")
@@ -50,6 +56,14 @@ export async function addComment(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다." };
+
+  // 댓글은 한 개당 2000자까지라 스팸이 곧 DB 부담이 됩니다.
+  if (
+    !(await rateLimit(`comment-min:${user.id}`, 5, 60)) ||
+    !(await rateLimit(`comment-hour:${user.id}`, 60, 3600))
+  ) {
+    return { ok: false, error: TOO_MANY };
+  }
 
   const { error } = await supabase.from("comments").insert({
     game_id: gameId,

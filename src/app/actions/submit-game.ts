@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { TOO_MANY, rateLimit } from "@/lib/rate-limit";
 
 const MAX_HTML_BYTES = 400_000; // 약 400KB — 단일 HTML 게임에는 충분합니다.
 
@@ -26,6 +27,14 @@ export async function submitGame(formData: FormData): Promise<SubmitResult> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다." };
+
+  // 제출물 하나가 최대 400KB 라, 횟수를 막지 않으면 계정 하나로 DB 를 채울 수 있습니다.
+  if (
+    !(await rateLimit(`submit-game-min:${user.id}`, 3, 60)) ||
+    !(await rateLimit(`submit-game-day:${user.id}`, 20, 86400))
+  ) {
+    return { ok: false, error: TOO_MANY };
+  }
 
   const title = String(formData.get("title") ?? "").trim();
   const tagline = String(formData.get("tagline") ?? "").trim();

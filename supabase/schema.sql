@@ -340,6 +340,28 @@ drop policy if exists profiles_update on public.profiles;
 create policy profiles_read   on public.profiles for select using (true);
 create policy profiles_update on public.profiles for update using (id = auth.uid()) with check (id = auth.uid());
 
+-- RLS 는 "어느 행"만 정하고 "어느 컬럼"은 정하지 못합니다. 위 정책만 있으면
+-- 로그인한 사람이 REST 로 {"role":"owner"} 를 PATCH 해서 운영자가 될 수 있으므로,
+-- 컬럼 단위 GRANT 로 role 을 빼고 트리거로 한 겹 더 막습니다.
+-- service_role 과 postgres(SQL Editor) 는 영향을 받지 않습니다.
+revoke update on public.profiles from anon, authenticated;
+grant  update (handle, display_name, avatar_url, bio)
+  on public.profiles to authenticated;
+
+create or replace function public.guard_profile_role()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.role is distinct from old.role and auth.uid() is not null then
+    raise exception '역할은 직접 바꿀 수 없습니다.';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists profiles_guard_role on public.profiles;
+create trigger profiles_guard_role
+  before update on public.profiles
+  for each row execute function public.guard_profile_role();
+
 -- games : 공개된 것 + 내 것 + 운영자
 drop policy if exists games_read   on public.games;
 drop policy if exists games_insert on public.games;
@@ -403,7 +425,62 @@ create policy comments_update on public.comments for update to authenticated
 create policy comments_delete on public.comments for delete to authenticated
   using (user_id = auth.uid() or public.is_staff());
 
--- 뷰 / 함수 권한
+-- ---------------------------------------------------------------------
+-- 10. 레이트리밋
+--
+--     서버리스라 프로세스 메모리에 카운터를 둘 수 없어(인스턴스마다 따로 셈)
+--     DB 에 고정 창(fixed window) 카운터를 둡니다. 서버 라우트만 호출합니다.
+-- ---------------------------------------------------------------------
+create table if not exists public.rate_limits (
+  key          text not null,
+  window_start timestamptz not null,
+  hits         integer not null default 0,
+  primary key (key, window_start)
+);
+
+alter table public.rate_limits enable row level security;
+-- 정책 없음 → anon/authenticated 는 어떤 행도 읽거나 쓸 수 없습니다.
+
+create index if not exists rate_limits_window_idx on public.rate_limits(window_start);
+
+create or replace function public.rate_limit_hit(
+  p_key            text,
+  p_limit          integer,
+  p_window_seconds integer
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  w timestamptz;
+  n integer;
+begin
+  w := to_timestamp(floor(extract(epoch from now()) / p_window_seconds) * p_window_seconds);
+
+  insert into public.rate_limits (key, window_start, hits)
+  values (p_key, w, 1)
+  on conflict (key, window_start)
+    do update set hits = public.rate_limits.hits + 1
+  returning hits into n;
+
+  if random() < 0.01 then
+    delete from public.rate_limits where window_start < now() - interval '1 day';
+  end if;
+
+  return n <= p_limit;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 11. 뷰 / 함수 권한
+-- ---------------------------------------------------------------------
 grant select on public.game_leaderboard, public.tournament_leaderboard to anon, authenticated;
-grant execute on function public.increment_play_count(uuid) to anon, authenticated;
 grant execute on function public.tournament_attempt_count(uuid, uuid) to anon, authenticated;
+
+-- 아래 둘은 브라우저에서 직접 부르면 얼마든지 부풀리거나 우회할 수 있어
+-- 서버 라우트(service_role)만 부를 수 있게 합니다.
+revoke execute on function public.increment_play_count(uuid) from anon, authenticated;
+grant  execute on function public.increment_play_count(uuid) to service_role;
+revoke execute on function public.rate_limit_hit(text, integer, integer) from anon, authenticated;
+grant  execute on function public.rate_limit_hit(text, integer, integer) to service_role;

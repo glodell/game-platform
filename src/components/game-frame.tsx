@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { formatScore } from "@/lib/format";
 import { GAME_SANDBOX } from "@/lib/sandbox";
 
@@ -175,20 +174,20 @@ export function GameFrame({
 
   // 플레이 수 집계 (한 페이지 방문당 1회)
   //
-  // supabase-js 의 쿼리 빌더는 lazy 라서 await/then 을 붙이지 않으면
-  // HTTP 요청이 아예 나가지 않습니다. 결과는 안 쓰지만 반드시 await 해야 합니다.
+  // 예전에는 브라우저가 Supabase RPC 를 직접 불렀는데, 그러면 누구나 반복 호출로
+  // 카운트를 부풀릴 수 있어서 서버 라우트를 거치도록 바꿨습니다.
+  // 집계 실패는 플레이에 영향이 없으므로 조용히 넘어갑니다.
   useEffect(() => {
-    const supabase = createClient();
-    let cancelled = false;
+    const controller = new AbortController();
 
-    (async () => {
-      const { error } = await supabase.rpc("increment_play_count", { p_game_id: gameId });
-      if (error && !cancelled) console.warn("플레이 수 집계 실패:", error.message);
-    })();
+    void fetch("/api/games/play", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gameId }),
+      signal: controller.signal,
+    }).catch(() => {});
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [gameId]);
 
   return (

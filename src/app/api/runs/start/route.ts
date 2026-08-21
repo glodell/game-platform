@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { issueRunToken } from "@/lib/run-token";
+import { TOO_MANY, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,12 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "점수를 남기려면 로그인이 필요합니다." }, { status: 401 });
+  }
+
+  // 토큰을 미리 쌓아두는 것 자체를 막습니다.
+  // (실제 도전 횟수 확인은 기록이 쌓이는 /api/runs/submit 에서 합니다.)
+  if (!(await rateLimit(`run-start:${user.id}`, 30, 60))) {
+    return NextResponse.json({ error: TOO_MANY }, { status: 429 });
   }
 
   let body: { gameId?: string; tournamentId?: string | null };
