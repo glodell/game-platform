@@ -156,7 +156,7 @@ export default function SdkDocsPage() {
           알아서 모으므로 게임 코드에서 따로 할 일은 없습니다.
         </p>
         <ul className="mt-4 space-y-2 text-sm text-ink-400">
-          <li>· 입력 횟수와 첫 입력까지 걸린 시간</li>
+          <li>· 조작 횟수(누름 · 움직임)와 첫 조작까지 걸린 시간</li>
           <li>· Arcade.progress() 로 들어온 점수 곡선</li>
           <li>· 두 시계(Date.now · performance.now)의 정합성</li>
           <li>· 판 도중 탭이 백그라운드로 갔는지</li>

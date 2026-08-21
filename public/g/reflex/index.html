@@ -28,55 +28,99 @@
   #stage.fail  { background: #5a1a1a; }
   h1 { font-size: clamp(22px, 6vw, 34px); margin: 0 0 10px; font-weight: 900; letter-spacing: -0.02em; }
   p  { margin: 0; font-size: clamp(13px, 3.4vw, 16px); opacity: 0.75; line-height: 1.6; }
-  #rounds {
-    position: absolute; top: 14px; right: 16px;
-    font-size: 13px; opacity: 0.6; font-variant-numeric: tabular-nums;
-  }
   .big { font-size: clamp(40px, 12vw, 72px); font-weight: 900; font-variant-numeric: tabular-nums; }
+
+  /*
+    라운드 진행 표시는 화면 한가운데 둡니다.
+    구석에 두면 플랫폼이 얹는 전체화면 버튼·점수 칩에 가려서,
+    "이게 언제 끝나는 거지?" 가 됩니다.
+  */
+  #dots { display: flex; gap: 10px; justify-content: center; margin-top: 18px; }
+  .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: rgba(231, 233, 247, 0.2);
+    transition: background 140ms, transform 140ms;
+  }
+  .dot.done { background: #b6ff3c; }
+  .dot.now  { background: rgba(231, 233, 247, 0.75); transform: scale(1.25); }
+  #times {
+    margin-top: 10px; min-height: 1.2em;
+    font-size: 13px; opacity: 0.55; font-variant-numeric: tabular-nums;
+  }
 </style>
 </head>
 <body>
   <div id="stage" class="ready">
     <div>
       <h1 id="title">반응속도 테스트</h1>
-      <p id="hint">화면을 눌러 시작하세요<br>초록으로 바뀌는 순간 바로 누르면 됩니다 (5회 평균)</p>
+      <p id="hint">화면을 눌러 시작하세요<br>초록으로 바뀌는 순간 바로 누르면 됩니다 · 5회 평균</p>
+      <div id="dots"></div>
+      <p id="times"></p>
     </div>
   </div>
-  <div id="rounds"></div>
 
 <script src="/sdk/arcade.js"></script>
 <script>
 (function () {
-  var stage  = document.getElementById("stage");
-  var title  = document.getElementById("title");
-  var hint   = document.getElementById("hint");
-  var rounds = document.getElementById("rounds");
+  var stage   = document.getElementById("stage");
+  var title   = document.getElementById("title");
+  var hint    = document.getElementById("hint");
+  var dotsEl  = document.getElementById("dots");
+  var timesEl = document.getElementById("times");
 
   var TOTAL = 5;
   var state = "ready";      // ready | wait | go | result | done
   var times = [];
   var timer = null;
   var greenAt = 0;
+  var greeting = "";
 
   Arcade.ready(function (config) {
-    hint.innerHTML = config.player.name + "님, 화면을 눌러 시작하세요<br>초록으로 바뀌는 순간 바로 누르면 됩니다 (5회 평균)";
+    greeting = config.player.name + "님, ";
+    if (state === "ready") setText("화면을 눌러 시작하세요<br>초록으로 바뀌는 순간 바로 누르면 됩니다 · 5회 평균", true);
   });
 
   function setStage(cls) { stage.className = cls; }
+
+  /** 인사말은 시작 전에만 붙입니다 — 판 중에는 남은 라운드가 더 중요합니다. */
+  function setText(html, withGreeting) {
+    hint.innerHTML = (withGreeting ? greeting : "") + html;
+  }
+
+  function round() { return times.length + 1; }
+
+  function render() {
+    var html = "";
+    for (var i = 0; i < TOTAL; i++) {
+      var cls = "dot";
+      if (i < times.length) cls += " done";
+      else if (i === times.length && (state === "wait" || state === "go")) cls += " now";
+      html += '<span class="' + cls + '"></span>';
+    }
+    dotsEl.innerHTML = html;
+    timesEl.textContent = times.length
+      ? times.map(function (t) { return Math.round(t); }).join(" · ") + " ms"
+      : "";
+  }
+
+  function average() {
+    return times.reduce(function (a, b) { return a + b; }, 0) / times.length;
+  }
 
   function beginRound() {
     state = "wait";
     setStage("wait");
     title.textContent = "기다리세요…";
-    hint.textContent = "초록으로 바뀌면 바로 누르기";
-    rounds.textContent = (times.length + 1) + " / " + TOTAL;
+    setText(round() + " / " + TOTAL + " 라운드 · 초록으로 바뀌면 바로 누르기");
+    render();
 
     var delay = 1200 + Math.random() * 2600;
     timer = setTimeout(function () {
       state = "go";
       setStage("go");
       title.textContent = "지금!";
-      hint.textContent = "";
+      setText(round() + " / " + TOTAL + " 라운드");
+      render();
       greenAt = performance.now();
     }, delay);
   }
@@ -88,14 +132,19 @@
     title.innerHTML = '<span class="big">' + Math.round(ms) + '</span> ms';
 
     if (times.length >= TOTAL) {
-      var avg = times.reduce(function (a, b) { return a + b; }, 0) / times.length;
-      hint.textContent = "5회 평균 " + Math.round(avg) + "ms — 기록을 제출했습니다";
-      rounds.textContent = "";
+      var avg = Math.round(average());
       state = "done";
-      Arcade.gameOver(Math.round(avg), { attempts: times.map(Math.round) });
-    } else {
-      hint.textContent = "눌러서 다음 라운드";
+      title.innerHTML = '<span class="big">' + avg + '</span> ms';
+      setText("5회 평균 — 기록을 제출했습니다<br>눌러서 다시 도전");
+      render();
+      Arcade.gameOver(avg, { attempts: times.map(Math.round) });
+      return;
     }
+
+    // 진행 중 평균을 플랫폼 점수 칩에도 흘려보냅니다 (검증용 점수 곡선도 여기서 쌓입니다).
+    Arcade.progress(Math.round(average()));
+    setText(times.length + " / " + TOTAL + " 완료 · 눌러서 다음 라운드");
+    render();
   }
 
   function onPress() {
@@ -107,12 +156,13 @@
     }
 
     if (state === "wait") {
-      // 초록 전에 누름 — 이번 라운드는 페널티
+      // 초록 전에 누름 — 이번 라운드는 기록에 넣지 않고 다시 합니다.
       clearTimeout(timer);
       state = "result";
       setStage("fail");
       title.textContent = "너무 빨랐어요";
-      hint.textContent = "눌러서 이 라운드 다시";
+      setText(round() + " / " + TOTAL + " 라운드 다시 · 눌러서 계속");
+      render();
       return;
     }
 
@@ -131,6 +181,8 @@
   window.addEventListener("keydown", function (e) {
     if (e.code === "Space") { e.preventDefault(); onPress(); }
   });
+
+  render();
 })();
 </script>
 </body>

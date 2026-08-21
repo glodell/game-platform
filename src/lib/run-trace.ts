@@ -15,6 +15,8 @@
 export type RunTrace = {
   sdk: number;
   inputs: number;
+  /** 누르지 않고 움직여서 조종하는 게임을 위해 따로 셉니다 (SDK 2 부터). */
+  moves: number;
   firstInputMs: number | null;
   samples: [number, number][];
   hiddenMs: number;
@@ -37,7 +39,7 @@ export type RunFlag =
 /** 검토 화면에 그대로 쓰는 사람이 읽을 설명. */
 export const FLAG_LABELS: Record<RunFlag, string> = {
   "no-trace": "검증 데이터 없음 — SDK 를 거치지 않고 제출됐습니다",
-  "no-input": "입력이 한 번도 없었는데 점수가 나왔습니다",
+  "no-input": "조작이 한 번도 없었는데 점수가 나왔습니다 (누름·움직임 모두 0)",
   "no-start": "Arcade.start() 없이 gameOver() 만 호출됐습니다",
   "clock-drift": "두 시계가 어긋납니다 — 플레이 중 시스템 시각을 바꿨을 수 있습니다",
   "duration-lie": "신고한 플레이 시간이 실제 경과 시간보다 깁니다",
@@ -70,6 +72,7 @@ export function parseTrace(raw: unknown): RunTrace | null {
   return {
     sdk: num(t.sdk) ?? 0,
     inputs: Math.max(0, Math.round(inputs)),
+    moves: Math.max(0, Math.round(num(t.moves) ?? 0)),
     firstInputMs: num(t.firstInputMs),
     samples,
     hiddenMs: Math.max(0, Math.round(num(t.hiddenMs) ?? 0)),
@@ -108,7 +111,9 @@ export function evaluateRun(input: EvaluateInput): RunFlag[] {
     if (!trace.startedGame) flags.push("no-start");
 
     // 조작 없이 점수가 나왔다 — 스크립트로 gameOver 만 부른 전형적인 모양입니다.
-    if (trace.inputs === 0 && score !== 0) flags.push("no-input");
+    // 누름과 움직임을 함께 봅니다. 마우스를 따라다니는 조종은 pointerdown 이
+    // 한 번도 없어서, 누름만 세면 정상 플레이가 통째로 여기 걸립니다.
+    if (trace.inputs === 0 && trace.moves === 0 && score !== 0) flags.push("no-input");
 
     // 단조 시계(performance.now)와 시스템 시계(Date.now)가 어긋남.
     // 정상 브라우저에서는 몇 ms 차이라, 2초 넘게 벌어지면 시각을 건드린 것입니다.

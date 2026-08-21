@@ -201,14 +201,16 @@ function TraceDetail({ run }: { run: ReviewRun }) {
 
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-ink-400">
-      <span>입력 {t.inputs}회</span>
+      <span>
+        누름 {t.inputs}회{t.moves > 0 && ` · 움직임 ${t.moves}회`}
+      </span>
       <span>
         플레이 {seconds(t.perfMs)}
         {Math.abs(t.perfMs - t.wallMs) > 500 && (
           <span className="text-gold"> (시계 기준 {seconds(t.wallMs)})</span>
         )}
       </span>
-      {t.firstInputMs !== null && <span>첫 입력 {seconds(t.firstInputMs)}</span>}
+      {t.firstInputMs !== null && <span>첫 조작 {seconds(t.firstInputMs)}</span>}
       {t.hiddenMs > 0 && <span>백그라운드 {seconds(t.hiddenMs)}</span>}
       {t.samples.length >= 2 && <ScoreCurve samples={t.samples} />}
     </div>

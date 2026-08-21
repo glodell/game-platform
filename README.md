@@ -29,6 +29,11 @@
 > 누구나 REST 로 자기 역할을 `owner` 로 바꿔 운영자가 될 수 있습니다.
 > 새로 만드는 프로젝트는 `schema.sql` 에 이미 포함돼 있어 따로 실행할 필요가 없습니다.
 
+> **기록 검증**은 [`supabase/run-verification.sql`](supabase/run-verification.sql) 을 실행해야
+> 켜집니다 (`runs.flags` 컬럼 · 무효 처리 정책 · 랭킹 뷰). 여러 번 실행해도 안전하고,
+> 지금 버전에는 예전 SDK 가 정상 플레이에 잘못 달았던 표시(`no-input` · `score-jump`)를
+> 걷어내는 정리 쿼리도 들어 있습니다 — 검토 큐가 오탐으로 차 있다면 다시 한 번 실행하세요.
+
 ### 1-2. 구글 로그인 켜기
 
 1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 에서 OAuth 클라이언트 ID 생성 (유형: 웹 애플리케이션)
@@ -179,13 +184,14 @@ src/
   lib/                       Supabase 클라이언트, 쿼리, 샌드박스, 토큰
 public/
   sdk/arcade.js              게임이 불러가는 SDK
-  games/                     기본 게임 (reflex, dodge)
+  g/                         기본 게임 (reflex, dodge)
   brand/                     로고 · 마크 · 채널아트 (README.md 에 사용 규칙)
 scripts/
   brand/build-brand.mjs      브랜드 애셋 생성기 (색·문구 고치고 다시 실행)
 supabase/
   schema.sql                 테이블 · 뷰 · 트리거 · RLS · 레이트리밋
   security-fixes.sql         운영 중인 DB 에 보안 패치만 따로 적용하는 스크립트
+  run-verification.sql       기록 검증 컬럼 · 무효 처리 정책 · 랭킹 뷰
   seed.sql                   샘플 데이터
 ```
 

@@ -117,6 +117,34 @@ grant select on public.game_leaderboard, public.tournament_leaderboard to anon, 
 
 
 -- ---------------------------------------------------------------------
+-- 4. 오탐 정리 — SDK 1 이 잘못 단 표시 걷어내기
+--
+--    아래 두 가지는 검증 데이터를 모으는 쪽의 문제였습니다. 대상은 SDK 1 형식으로
+--    남은 기록(meta.trace.moves 가 없는 기록)뿐이고, 다른 표시와 이미 한 무효
+--    처리는 건드리지 않습니다.
+--
+--    (1) no-input — SDK 1 은 누름(pointerdown · keydown · touchstart)만 셌습니다.
+--        마우스를 따라 움직이는 조종(운석 피하기)은 누름이 한 번도 없어서
+--        정상 플레이가 통째로 "조작이 한 번도 없었다"로 표시됐습니다.
+--
+--    (2) score-jump — SDK 1 은 점수 곡선을 앞에서부터 40개만 담았습니다. 60fps
+--        게임에서는 첫 0.6초에서 곡선이 끊겨, 오래 버틸수록 "곡선 끝 대비 최종
+--        점수가 몇십 배"가 됐습니다. 곡선이 판의 절반도 못 덮은 기록만 지웁니다.
+-- ---------------------------------------------------------------------
+update public.runs
+set flags = array_remove(flags, 'no-input')
+where 'no-input' = any (flags)
+  and meta -> 'trace' -> 'moves' is null;
+
+update public.runs
+set flags = array_remove(flags, 'score-jump')
+where 'score-jump' = any (flags)
+  and meta -> 'trace' -> 'moves' is null
+  and coalesce((meta -> 'trace' -> 'samples' -> -1 ->> 0)::numeric, 0)
+      < coalesce((meta -> 'trace' ->> 'perfMs')::numeric, 0) * 0.5;
+
+
+-- ---------------------------------------------------------------------
 -- 확인
 -- ---------------------------------------------------------------------
 select

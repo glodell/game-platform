@@ -19,7 +19,7 @@
  * 검증 데이터
  *   대회 기록의 앞뒤가 맞는지 보기 위해, SDK 가 판마다 다음을 자동으로 모아 함께 보냅니다.
  *   게임 코드에서 따로 할 일은 없습니다.
- *     - 입력 횟수와 첫 입력까지 걸린 시간 (조작 없이 점수가 나왔는지)
+ *     - 조작 횟수와 첫 조작까지 걸린 시간 (누름·움직임을 따로 셉니다)
  *     - Arcade.progress() 로 들어온 점수 곡선 (점수가 한 번에 튀었는지)
  *     - 시계 정합성: Date.now 와 performance.now 의 차이 (시간 조작 탐지)
  *     - 판 도중 탭이 백그라운드로 갔는지
@@ -40,15 +40,22 @@
 
   /* ---------------- 검증 데이터 수집 ---------------- */
 
-  var MAX_SAMPLES = 40; // 점수 곡선은 40개면 모양을 보기에 충분합니다.
+  var MAX_SAMPLES = 40;      // 점수 곡선은 40개면 모양을 보기에 충분합니다.
+  var SAMPLE_START_MS = 250; // 표본 간격 — 판이 길어지면 아래에서 두 배씩 늘립니다.
+  var MOVE_INTERVAL = 120;   // 움직임은 프레임마다 오므로 이 간격에 한 번만 셉니다.
 
   var trace = null;
+  var lastMoveAt = -Infinity;
+  var lastSampleAt = -Infinity;
+  var sampleInterval = SAMPLE_START_MS;
 
   function newTrace() {
     return {
-      inputs: 0,        // 판 중 입력(포인터·키·터치) 횟수
-      firstInputMs: null, // 시작 후 첫 입력까지 (null 이면 입력이 아예 없었음)
+      inputs: 0,        // 판 중 누른 횟수 (포인터·키·터치)
+      moves: 0,         // 판 중 움직인 횟수 (마우스·터치 드래그)
+      firstInputMs: null, // 시작 후 첫 조작까지 (null 이면 조작이 아예 없었음)
       samples: [],      // [경과ms, 점수] 쌍
+      lastProgress: null, // 마지막으로 보고된 [경과ms, 점수]
       hiddenMs: 0,      // 탭이 백그라운드였던 시간
       hiddenAt: null,
     };
@@ -65,9 +72,29 @@
     if (trace.firstInputMs === null) trace.firstInputMs = elapsed();
   }
 
+  /**
+   * 움직임도 조작입니다.
+   *
+   * 마우스를 따라 움직이는 조종(운석 피하기가 그렇습니다)은 판이 끝날 때까지
+   * pointerdown 이 한 번도 오지 않습니다. 누름만 세면 멀쩡한 플레이가 통째로
+   * "조작 없음"으로 표시되므로, 움직임을 따로 셉니다.
+   */
+  function onMove() {
+    if (!trace) return;
+    var now = performance.now();
+    if (now - lastMoveAt < MOVE_INTERVAL) return;
+    lastMoveAt = now;
+    trace.moves += 1;
+    if (trace.firstInputMs === null) trace.firstInputMs = elapsed();
+  }
+
   ["pointerdown", "keydown", "touchstart"].forEach(function (type) {
     // capture 로 받아야 게임이 stopPropagation 을 걸어도 놓치지 않습니다.
     window.addEventListener(type, onInput, { capture: true, passive: true });
+  });
+
+  ["pointermove", "touchmove"].forEach(function (type) {
+    window.addEventListener(type, onMove, { capture: true, passive: true });
   });
 
   document.addEventListener("visibilitychange", function () {
@@ -80,6 +107,20 @@
     }
   });
 
+  /**
+   * 표본이 40개를 넘으면 하나 걸러 하나만 남기고 간격을 두 배로 늘립니다.
+   *
+   * 예전에는 앞에서부터 40개를 채우고 그만 뒀는데, 그러면 60fps 게임에서
+   * 곡선이 첫 0.6초에서 끊깁니다. 30초를 버틴 판이 "0.6초 시점 20점 → 최종 900점"
+   * 으로 보여서, 멀쩡한 기록이 전부 "점수가 튀었다"로 표시됐습니다.
+   */
+  function thinSamples() {
+    var kept = [];
+    for (var i = 0; i < trace.samples.length; i += 2) kept.push(trace.samples[i]);
+    trace.samples = kept;
+    sampleInterval *= 2;
+  }
+
   function sealTrace(score) {
     if (!trace) trace = newTrace();
     if (trace.hiddenAt !== null) {
@@ -88,11 +129,22 @@
     }
     var perfMs = elapsed();
     var wallMs = startedAt === null ? perfMs : Date.now() - startedAt;
+
+    // 마지막으로 보고된 점수는 반드시 곡선 끝에 남깁니다 —
+    // 서버가 "곡선의 끝"과 "제출된 점수"를 비교하기 때문입니다.
+    function finalSamples() {
+      var out = trace.samples.slice();
+      var last = trace.lastProgress;
+      if (last && (out.length === 0 || out[out.length - 1][0] !== last[0])) out.push(last);
+      return out;
+    }
+
     return {
-      sdk: 1,
+      sdk: 2, // 검증 데이터 형식 버전 (게임이 쓰는 Arcade.version 과는 별개입니다)
       inputs: trace.inputs,
+      moves: trace.moves,
       firstInputMs: trace.firstInputMs,
-      samples: trace.samples,
+      samples: finalSamples(),
       hiddenMs: trace.hiddenMs,
       perfMs: perfMs,   // 단조 시계 기준 플레이 시간
       wallMs: wallMs,   // 시스템 시계 기준 — 둘이 어긋나면 시계를 건드린 것
@@ -154,6 +206,9 @@
       startedPerf = performance.now();
       submitted = false;
       trace = newTrace();
+      lastMoveAt = -Infinity;
+      lastSampleAt = -Infinity;
+      sampleInterval = SAMPLE_START_MS;
       post("START", {});
       return this;
     },
@@ -161,8 +216,14 @@
     /** 진행 중 점수 (선택). 화면 상단 오버레이에 표시됩니다. */
     progress: function (score) {
       var value = Number(score) || 0;
-      if (trace && trace.samples.length < MAX_SAMPLES) {
-        trace.samples.push([elapsed(), value]);
+      if (trace) {
+        var at = elapsed();
+        trace.lastProgress = [at, value];
+        if (at - lastSampleAt >= sampleInterval) {
+          lastSampleAt = at;
+          trace.samples.push([at, value]);
+          if (trace.samples.length >= MAX_SAMPLES) thinSamples();
+        }
       }
       post("PROGRESS", { score: value });
       return this;
