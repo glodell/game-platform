@@ -114,7 +114,7 @@ export default async function GameDetailPage({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 mt-5">
+          <div className="mt-5">
             <LikeButton
               gameId={game.id}
               slug={game.slug}
@@ -122,12 +122,6 @@ export default async function GameDetailPage({
               initialCount={game.like_count}
               canLike={Boolean(viewer)}
             />
-            <Link
-              href={`/play/${game.slug}`}
-              className="rounded-xl border border-ink-700 px-4 py-2.5 text-sm font-semibold text-ink-300 hover:border-neon-400/50 hover:text-neon-400 transition-colors"
-            >
-              전체 화면으로 플레이
-            </Link>
           </div>
 
           {game.description && (

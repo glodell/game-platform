@@ -34,6 +34,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
+  /**
+   * 전체화면 플레이 전용 페이지(/play/…)를 없앴습니다 — 게임 화면 우상단의 전체화면
+   * 버튼과 역할이 그대로 겹쳤습니다. 이미 공유된 링크가 죽지 않도록 게임 상세로 넘깁니다.
+   */
+  async redirects() {
+    return [{ source: "/play/:slug", destination: "/games/:slug", permanent: false }];
+  },
 };
 
 export default nextConfig;
