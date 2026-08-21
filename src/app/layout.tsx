@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SetupGuide } from "@/components/setup-guide";
+import { SocialLinks } from "@/components/social-links";
 import { isSupabaseConfigured } from "@/lib/env";
 import { siteUrl } from "@/lib/sandbox";
 
@@ -49,14 +50,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {configured && <SiteHeader />}
         <main className="flex-1">{configured ? children : <SetupGuide />}</main>
         <footer className="border-t border-ink-800 mt-24">
-          <div className="mx-auto max-w-6xl px-5 py-10 text-sm text-ink-400 flex flex-wrap gap-x-8 gap-y-3 justify-between">
+          <div className="mx-auto max-w-6xl px-5 py-10 text-sm text-ink-400 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <p>© {new Date().getFullYear()} 바이버후드. 바이브코딩으로 노는 이웃들.</p>
-            <nav className="flex gap-5">
-              <Link href="/games" className="hover:text-ink-100">게임</Link>
-              <Link href="/tournaments" className="hover:text-ink-100">대회</Link>
-              <Link href="/hackathons" className="hover:text-ink-100">해커톤</Link>
-              <Link href="/docs/sdk" className="hover:text-ink-100">개발 가이드</Link>
-            </nav>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-8">
+              <nav className="flex flex-wrap gap-x-5 gap-y-2">
+                <Link href="/games" className="hover:text-ink-100">게임</Link>
+                <Link href="/tournaments" className="hover:text-ink-100">대회</Link>
+                <Link href="/hackathons" className="hover:text-ink-100">해커톤</Link>
+                <Link href="/docs/sdk" className="hover:text-ink-100">개발 가이드</Link>
+              </nav>
+              <SocialLinks />
+            </div>
           </div>
         </footer>
       </body>

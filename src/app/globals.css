@@ -74,3 +74,17 @@ body {
 .live-dot {
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
+
+/* 모바일 헤더 메뉴 시트가 열릴 때의 진입 모션 */
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sheet-in {
+  animation: sheet-in 0.16s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-in { animation: none; }
+}
