@@ -5,7 +5,7 @@
 --
 --  1) profiles.role 권한 상승 차단   ← 치명적. 이것부터 꼭 실행하세요.
 --  2) 레이트리밋 저장소
---  3) 플레이 카운트 직접 호출 차단
+--  3) 서버 전용 함수의 실행 권한 잠그기 (PUBLIC 포함)
 -- =====================================================================
 
 
@@ -93,18 +93,25 @@ begin
   return n <= p_limit;
 end $$;
 
-revoke execute on function public.rate_limit_hit(text, integer, integer) from anon, authenticated;
-grant  execute on function public.rate_limit_hit(text, integer, integer) to service_role;
-
 
 -- ---------------------------------------------------------------------
--- 3. 플레이 카운트: 브라우저에서 직접 못 부르게
+-- 3. 함수 실행 권한 잠그기
 --
---    지금까지는 anon 에게 열려 있어서 반복 호출로 얼마든지 부풀릴 수 있었습니다.
---    이제 /api/games/play 라우트가 IP·계정 기준으로 제한한 뒤 대신 호출합니다.
+--    주의: Postgres 는 함수를 만들 때 EXECUTE 를 PUBLIC 에게 기본으로 줍니다.
+--    anon · authenticated 는 PUBLIC 의 일원이라, 그 둘에게서만 revoke 하면
+--    PUBLIC 경유로 여전히 실행됩니다. 반드시 PUBLIC 에서도 회수해야 합니다.
+--
+--    increment_play_count: 브라우저가 직접 부르면 플레이 수를 얼마든지 부풀립니다.
+--    rate_limit_hit:       SECURITY DEFINER 라 RLS 를 우회합니다. 외부에 열려 있으면
+--                          남의 레이트리밋 버킷을 태워 특정 사용자를 막을 수 있습니다.
 -- ---------------------------------------------------------------------
-revoke execute on function public.increment_play_count(uuid) from anon, authenticated;
+revoke execute on function public.increment_play_count(uuid)
+  from public, anon, authenticated;
 grant  execute on function public.increment_play_count(uuid) to service_role;
+
+revoke execute on function public.rate_limit_hit(text, integer, integer)
+  from public, anon, authenticated;
+grant  execute on function public.rate_limit_hit(text, integer, integer) to service_role;
 
 
 -- ---------------------------------------------------------------------

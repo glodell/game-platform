@@ -480,7 +480,13 @@ grant execute on function public.tournament_attempt_count(uuid, uuid) to anon, a
 
 -- 아래 둘은 브라우저에서 직접 부르면 얼마든지 부풀리거나 우회할 수 있어
 -- 서버 라우트(service_role)만 부를 수 있게 합니다.
-revoke execute on function public.increment_play_count(uuid) from anon, authenticated;
+--
+-- PUBLIC 에서도 회수해야 합니다. Postgres 는 함수를 만들 때 EXECUTE 를 PUBLIC 에게
+-- 기본으로 주고, anon · authenticated 는 PUBLIC 의 일원이라 그 둘에게서만 revoke 하면
+-- PUBLIC 경유로 그대로 실행됩니다.
+revoke execute on function public.increment_play_count(uuid)
+  from public, anon, authenticated;
 grant  execute on function public.increment_play_count(uuid) to service_role;
-revoke execute on function public.rate_limit_hit(text, integer, integer) from anon, authenticated;
+revoke execute on function public.rate_limit_hit(text, integer, integer)
+  from public, anon, authenticated;
 grant  execute on function public.rate_limit_hit(text, integer, integer) to service_role;
