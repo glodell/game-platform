@@ -8,6 +8,7 @@ import {
   createOfficialGame,
   createTournament,
   reviewSubmission,
+  setGameThumbnail,
   type AdminResult,
 } from "@/app/actions/admin";
 import { Badge } from "./ui";
@@ -86,6 +87,137 @@ export function ReviewRow({
         </div>
       </div>
       {result && <p className="text-xs text-ink-400 mt-2">{result}</p>}
+    </li>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 썸네일 지정                                                          */
+/* ------------------------------------------------------------------ */
+
+export type ThumbGame = {
+  id: string;
+  title: string;
+  slug: string;
+  thumbnail_url: string | null;
+  status: string;
+};
+
+export function ThumbnailManager({ games }: { games: ThumbGame[] }) {
+  const [query, setQuery] = useState("");
+  const filtered = query
+    ? games.filter((g) => g.title.toLowerCase().includes(query.toLowerCase()))
+    : games;
+
+  return (
+    <section className="mt-12">
+      <h2 className="font-black text-lg mb-2">썸네일</h2>
+      <p className="text-sm text-ink-400 mb-4">
+        게임 카드에 쓰이는 이미지입니다. 비워두면 게임 이름으로 만든 그라디언트가 대신 나옵니다.
+        가로세로 16:10 을 권장합니다.
+      </p>
+
+      {games.length > 6 && (
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="게임 이름으로 찾기"
+          className="w-full mb-4 rounded-xl bg-ink-900 border border-ink-700 px-3.5 py-2.5 text-sm outline-none focus:border-neon-400/60 transition-colors"
+        />
+      )}
+
+      {filtered.length === 0 ? (
+        <p className="panel px-5 py-8 text-center text-sm text-ink-400">게임이 없습니다.</p>
+      ) : (
+        <ul className="space-y-3">
+          {filtered.map((game) => (
+            <ThumbnailRow key={game.id} game={game} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ThumbnailRow({ game }: { game: ThumbGame }) {
+  const [url, setUrl] = useState(game.thumbnail_url ?? "");
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const dirty = url.trim() !== (game.thumbnail_url ?? "");
+
+  function save() {
+    startTransition(async () => {
+      const res = await setGameThumbnail(game.id, url);
+      setResult({ ok: res.ok, text: res.ok ? res.message : res.error });
+      if (res.ok) router.refresh();
+    });
+  }
+
+  return (
+    <li className="panel p-4 flex flex-wrap items-start gap-4">
+      {/* 미리보기는 입력창의 현재 값을 그대로 씁니다 — 저장 전에 확인할 수 있게. */}
+      <div className="w-32 shrink-0 aspect-[16/10] rounded-lg overflow-hidden bg-ink-850 border border-ink-800 grid place-items-center">
+        {url.trim() ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url.trim()} alt="" className="size-full object-cover" />
+        ) : (
+          <span className="text-2xl opacity-30">🕹️</span>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/games/${game.slug}`}
+            target="_blank"
+            className="font-bold hover:text-neon-400 transition-colors"
+          >
+            {game.title}
+          </Link>
+          {game.status !== "published" && <Badge tone="gold">{game.status}</Badge>}
+        </div>
+
+        <input
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setResult(null);
+          }}
+          placeholder="https://… 또는 /games/…/thumb.png"
+          className="w-full mt-2 rounded-xl bg-ink-900 border border-ink-700 px-3.5 py-2.5 text-sm outline-none focus:border-neon-400/60 transition-colors"
+        />
+
+        <div className="flex flex-wrap items-center gap-3 mt-2.5">
+          <button
+            type="button"
+            onClick={save}
+            disabled={pending || !dirty}
+            className="rounded-lg bg-ink-100 text-ink-950 px-4 py-2 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-40"
+          >
+            {pending ? "저장 중…" : "저장"}
+          </button>
+          {url.trim() && (
+            <button
+              type="button"
+              onClick={() => {
+                setUrl("");
+                setResult(null);
+              }}
+              disabled={pending}
+              className="text-sm text-ink-400 hover:text-ink-100 transition-colors disabled:opacity-40"
+            >
+              지우기
+            </button>
+          )}
+          {result && (
+            <span className={`text-sm ${result.ok ? "text-lime-glow" : "text-punch-400"}`}>
+              {result.text}
+            </span>
+          )}
+        </div>
+      </div>
     </li>
   );
 }

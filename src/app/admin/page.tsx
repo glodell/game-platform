@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { AdminForms, ReviewRow } from "@/components/admin-panels";
+import { AdminForms, ReviewRow, ThumbnailManager } from "@/components/admin-panels";
 import { formatRelative } from "@/lib/format";
 import { getViewer } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -42,10 +42,11 @@ export default async function AdminPage() {
       )
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
+    // 썸네일은 공개 전 제출작에도 미리 달아둘 수 있어야 해서 반려 건만 뺍니다.
     supabase
       .from("games")
-      .select("id, title, slug")
-      .eq("status", "published")
+      .select("id, title, slug, thumbnail_url, status")
+      .in("status", ["published", "pending", "draft"])
       .order("title"),
   ]);
 
@@ -88,7 +89,9 @@ export default async function AdminPage() {
         )}
       </section>
 
-      <AdminForms games={games ?? []} />
+      <AdminForms games={(games ?? []).filter((g) => g.status === "published")} />
+
+      <ThumbnailManager games={games ?? []} />
     </div>
   );
 }

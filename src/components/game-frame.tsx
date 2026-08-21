@@ -35,7 +35,9 @@ export function GameFrame({
   attemptsLeft,
 }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<string | null>(null);
+  const [immersive, setImmersive] = useState(false);
   const [live, setLive] = useState(false);
   const [liveScore, setLiveScore] = useState<number | null>(null);
   const [submit, setSubmit] = useState<SubmitState>({ kind: "idle" });
@@ -132,6 +134,56 @@ export function GameFrame({
     [postResult, viewer],
   );
 
+  /**
+   * 전체화면.
+   *
+   * 브라우저 Fullscreen API 를 먼저 시도하되, 성공 여부와 무관하게 우리 오버레이도 켭니다.
+   * iOS사파리는 div 에 대한 requestFullscreen 을 지원하지 않아서, API 만 믿으면
+   * 아이폰에서는 전체화면이 아예 안 됩니다. 반대로 오버레이만 쓰면 안드로이드에서
+   * 주소창이 남습니다. 둘을 겹쳐야 어디서나 같은 경험이 됩니다.
+   *
+   * 그래서 나가는 길도 두 개입니다 — X 버튼과 Esc. 네이티브 전체화면에서 브라우저가
+   * 알아서 빠져나간 경우(사용자가 Esc 를 눌렀을 때)는 fullscreenchange 로 맞춰줍니다.
+   */
+  const enterImmersive = useCallback(() => {
+    setImmersive(true);
+    wrapRef.current?.requestFullscreen?.({ navigationUI: "hide" }).catch(() => {
+      // 지원하지 않는 브라우저 — 오버레이만으로 동작합니다.
+    });
+  }, []);
+
+  const exitImmersive = useCallback(() => {
+    setImmersive(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    function onFullscreenChange() {
+      // 네이티브 전체화면에서 빠져나왔으면 오버레이도 같이 끕니다.
+      if (!document.fullscreenElement) setImmersive(false);
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!immersive) return;
+
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") exitImmersive();
+    }
+    // 네이티브 전체화면이 아닐 때는 브라우저가 Esc 를 처리해주지 않습니다.
+    document.addEventListener("keydown", onKey);
+
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [exitImmersive, immersive]);
+
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.source !== frameRef.current?.contentWindow) return;
@@ -190,9 +242,28 @@ export function GameFrame({
     return () => controller.abort();
   }, [gameId]);
 
+  const statusBar = (
+    <StatusBar
+      state={submit}
+      scoreUnit={scoreUnit}
+      viewer={viewer}
+      attemptsLeft={attemptsLeft}
+      inTournament={Boolean(tournament)}
+    />
+  );
+
   return (
-    <div className="space-y-3">
-      <div className="relative rounded-2xl overflow-hidden border border-ink-700 bg-black aspect-[4/3] sm:aspect-video">
+    <div
+      ref={wrapRef}
+      className={immersive ? "fixed inset-0 z-[60] bg-black" : "space-y-3"}
+    >
+      <div
+        className={
+          immersive
+            ? "absolute inset-0"
+            : "relative rounded-2xl overflow-hidden border border-ink-700 bg-black aspect-[4/3] sm:aspect-video"
+        }
+      >
         <iframe
           ref={frameRef}
           title={title}
@@ -203,20 +274,46 @@ export function GameFrame({
         />
 
         {live && liveScore !== null && (
-          <div className="absolute top-3 left-3 rounded-lg bg-ink-950/80 border border-ink-700 px-3 py-1.5 text-sm font-bold tabular-nums backdrop-blur">
+          <div className="absolute top-3 left-3 z-10 rounded-lg bg-ink-950/80 border border-ink-700 px-3 py-1.5 text-sm font-bold tabular-nums backdrop-blur">
             {formatScore(liveScore, scoreUnit)}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={immersive ? exitImmersive : enterImmersive}
+          aria-label={immersive ? "전체화면 나가기" : "전체화면으로 보기"}
+          title={immersive ? "전체화면 나가기 (Esc)" : "전체화면"}
+          className="absolute top-3 right-3 z-10 grid size-10 place-items-center rounded-lg bg-ink-950/80 border border-ink-700 text-ink-300 hover:text-ink-100 hover:border-ink-600 backdrop-blur transition-colors"
+        >
+          {immersive ? <CloseIcon /> : <ExpandIcon />}
+        </button>
+
+        {immersive && (
+          <div className="absolute inset-x-0 bottom-0 z-10 p-3 pointer-events-none">
+            <div className="mx-auto max-w-2xl pointer-events-auto">{statusBar}</div>
           </div>
         )}
       </div>
 
-      <StatusBar
-        state={submit}
-        scoreUnit={scoreUnit}
-        viewer={viewer}
-        attemptsLeft={attemptsLeft}
-        inTournament={Boolean(tournament)}
-      />
+      {!immersive && statusBar}
     </div>
+  );
+}
+
+function ExpandIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
   );
 }
 

@@ -43,12 +43,20 @@ export async function submitGame(formData: FormData): Promise<SubmitResult> {
   const hackathonSlug = String(formData.get("hackathon") ?? "").trim();
   const scoring = formData.get("scoring") === "low" ? "low" : "high";
   const scoreUnit = String(formData.get("score_unit") ?? "점").trim() || "점";
+  const thumbnailUrl = String(formData.get("thumbnail_url") ?? "").trim();
 
   if (title.length < 2) return { ok: false, error: "게임 이름을 2자 이상 입력해 주세요." };
   if (title.length > 60) return { ok: false, error: "게임 이름은 60자까지입니다." };
   if (!html.trim()) return { ok: false, error: "게임 HTML 코드를 넣어주세요." };
   if (new Blob([html]).size > MAX_HTML_BYTES) {
     return { ok: false, error: "코드가 400KB를 넘습니다. 이미지는 외부 링크 대신 용량을 줄여주세요." };
+  }
+  // 썸네일은 <img src> 로 그대로 들어가므로 스킴을 제한합니다.
+  if (thumbnailUrl && !/^https?:\/\//i.test(thumbnailUrl)) {
+    return { ok: false, error: "썸네일은 http:// 또는 https:// 로 시작하는 주소여야 합니다." };
+  }
+  if (thumbnailUrl.length > 2000) {
+    return { ok: false, error: "썸네일 주소가 너무 깁니다." };
   }
 
   let hackathonId: string | null = null;
@@ -78,6 +86,7 @@ export async function submitGame(formData: FormData): Promise<SubmitResult> {
       title,
       tagline: tagline || null,
       description: description || null,
+      thumbnail_url: thumbnailUrl || null,
       kind: "community",
       status: "pending", // 운영자 검토 후 공개
       source: "html",

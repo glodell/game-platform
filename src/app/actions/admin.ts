@@ -63,6 +63,49 @@ export async function reviewSubmission(
   return { ok: true, message: decision === "approve" ? "공개했습니다." : "반려했습니다." };
 }
 
+/**
+ * 썸네일 지정.
+ *
+ * 빈 값을 보내면 지웁니다(카드에 슬러그 기반 그라디언트가 다시 나옵니다).
+ * javascript: 같은 스킴이 img src 에 들어가는 것을 막기 위해 http(s) 와
+ * 사이트 내부 경로(/…)만 받습니다.
+ */
+export async function setGameThumbnail(gameId: string, rawUrl: string): Promise<AdminResult> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return { ok: false, error: "권한이 없습니다." };
+
+  const url = rawUrl.trim();
+  if (url) {
+    const allowed =
+      url.startsWith("/") ||
+      (() => {
+        try {
+          return ["http:", "https:"].includes(new URL(url).protocol);
+        } catch {
+          return false;
+        }
+      })();
+    if (!allowed) {
+      return { ok: false, error: "http(s) 주소나 / 로 시작하는 내부 경로만 넣을 수 있습니다." };
+    }
+    if (url.length > 2000) return { ok: false, error: "주소가 너무 깁니다." };
+  }
+
+  const { data, error } = await supabase
+    .from("games")
+    .update({ thumbnail_url: url || null })
+    .eq("id", gameId)
+    .select("slug")
+    .single();
+
+  if (error) return { ok: false, error: `저장 실패: ${error.message}` };
+
+  revalidatePath("/admin");
+  revalidatePath("/games");
+  revalidatePath(`/games/${data.slug}`);
+  return { ok: true, message: url ? "썸네일을 저장했습니다." : "썸네일을 지웠습니다." };
+}
+
 /** 공식 게임 등록 */
 export async function createOfficialGame(formData: FormData): Promise<AdminResult> {
   const { supabase, user, staff } = await requireStaff();

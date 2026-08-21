@@ -133,6 +133,16 @@ export function SubmitForm({ hackathons, defaultHackathon, siteUrl }: Props) {
         <textarea name="description" rows={3} className={inputClass} />
       </Field>
 
+      <Field label="썸네일 주소" hint="선택 — 비우면 게임 이름으로 만든 그라디언트가 들어갑니다">
+        <input
+          name="thumbnail_url"
+          type="url"
+          maxLength={2000}
+          placeholder="https://…"
+          className={inputClass}
+        />
+      </Field>
+
       {hackathons.length > 0 && (
         <Field label="해커톤 참가" hint="접수 중인 해커톤이 있으면 선택하세요">
           <select name="hackathon" defaultValue={defaultHackathon} className={inputClass}>
