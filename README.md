@@ -23,6 +23,12 @@
 2. **SQL Editor** 에서 [`supabase/schema.sql`](supabase/schema.sql) 전체를 붙여넣고 실행
 3. 이어서 [`supabase/seed.sql`](supabase/seed.sql) 도 실행하면 기본 게임 2개 + 샘플 대회·해커톤이 생깁니다
 
+> **이미 운영 중인 프로젝트라면** [`supabase/security-fixes.sql`](supabase/security-fixes.sql) 을
+> 한 번 실행하세요. `schema.sql` 을 처음 돌린 시점에는 없던 보안 패치가 들어 있습니다.
+> 특히 `profiles.role` 컬럼 잠금은 이걸 실행해야만 적용됩니다 — 그 전까지는 로그인한
+> 누구나 REST 로 자기 역할을 `owner` 로 바꿔 운영자가 될 수 있습니다.
+> 새로 만드는 프로젝트는 `schema.sql` 에 이미 포함돼 있어 따로 실행할 필요가 없습니다.
+
 ### 1-2. 구글 로그인 켜기
 
 1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 에서 OAuth 클라이언트 ID 생성 (유형: 웹 애플리케이션)
@@ -178,7 +184,8 @@ public/
 scripts/
   brand/build-brand.mjs      브랜드 애셋 생성기 (색·문구 고치고 다시 실행)
 supabase/
-  schema.sql                 테이블 · 뷰 · 트리거 · RLS
+  schema.sql                 테이블 · 뷰 · 트리거 · RLS · 레이트리밋
+  security-fixes.sql         운영 중인 DB 에 보안 패치만 따로 적용하는 스크립트
   seed.sql                   샘플 데이터
 ```
 
