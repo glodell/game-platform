@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { AdminForms, ReviewRow, ThumbnailManager } from "@/components/admin-panels";
+import { RunReview, type ReviewRun } from "@/components/run-review";
+import { parseTrace } from "@/lib/run-trace";
 import { formatRelative } from "@/lib/format";
 import { getViewer } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -34,7 +36,7 @@ export default async function AdminPage() {
   }
 
   const supabase = await createClient();
-  const [{ data: pending }, { data: games }] = await Promise.all([
+  const [{ data: pending }, { data: games }, { data: runs }] = await Promise.all([
     supabase
       .from("games")
       .select(
@@ -48,7 +50,50 @@ export default async function AdminPage() {
       .select("id, title, slug, thumbnail_url, status")
       .in("status", ["published", "pending", "draft"])
       .order("title"),
+    // 검토 큐는 최근 것만 봅니다 — 오래된 기록까지 훑을 일은 거의 없습니다.
+    supabase
+      .from("runs")
+      .select(
+        "id, score, duration_ms, created_at, meta, flags, voided_at, voided_reason, " +
+          "game:games!runs_game_id_fkey(title, slug, score_unit), " +
+          "tournament:tournaments!runs_tournament_id_fkey(title), " +
+          "player:profiles!runs_user_id_fkey(handle, display_name)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(120),
   ]);
+
+  const reviewRuns: ReviewRun[] = (runs ?? []).map((row) => {
+    const r = row as unknown as {
+      id: string;
+      score: number;
+      duration_ms: number | null;
+      created_at: string;
+      meta: { trace?: unknown } | null;
+      flags: string[] | null;
+      voided_at: string | null;
+      voided_reason: string | null;
+      game: { title: string; slug: string; score_unit: string | null } | null;
+      tournament: { title: string } | null;
+      player: { handle: string; display_name: string } | null;
+    };
+    return {
+      id: r.id,
+      score: r.score,
+      durationMs: r.duration_ms,
+      createdAt: r.created_at,
+      flags: r.flags ?? [],
+      voidedAt: r.voided_at,
+      voidedReason: r.voided_reason,
+      trace: parseTrace(r.meta?.trace),
+      gameTitle: r.game?.title ?? "삭제된 게임",
+      gameSlug: r.game?.slug ?? "",
+      scoreUnit: r.game?.score_unit ?? null,
+      tournamentTitle: r.tournament?.title ?? null,
+      playerHandle: r.player?.handle ?? "알 수 없음",
+      playerName: r.player?.display_name ?? "알 수 없음",
+    };
+  });
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-12">
@@ -90,6 +135,8 @@ export default async function AdminPage() {
       </section>
 
       <AdminForms games={(games ?? []).filter((g) => g.status === "published")} />
+
+      <RunReview runs={reviewRuns} />
 
       <ThumbnailManager games={games ?? []} />
     </div>

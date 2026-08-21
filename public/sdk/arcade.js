@@ -15,6 +15,15 @@
  * 규칙은 두 줄입니다.
  *   1) 시작할 준비가 되면 Arcade.ready(콜백) 를 부르세요.
  *   2) 한 판이 끝나면 Arcade.gameOver(점수) 를 부르세요. 나머지는 플랫폼이 합니다.
+ *
+ * 검증 데이터
+ *   대회 기록의 앞뒤가 맞는지 보기 위해, SDK 가 판마다 다음을 자동으로 모아 함께 보냅니다.
+ *   게임 코드에서 따로 할 일은 없습니다.
+ *     - 입력 횟수와 첫 입력까지 걸린 시간 (조작 없이 점수가 나왔는지)
+ *     - Arcade.progress() 로 들어온 점수 곡선 (점수가 한 번에 튀었는지)
+ *     - 시계 정합성: Date.now 와 performance.now 의 차이 (시간 조작 탐지)
+ *     - 판 도중 탭이 백그라운드로 갔는지
+ *   개인을 식별할 수 있는 값은 모으지 않습니다.
  */
 (function () {
   "use strict";
@@ -23,10 +32,74 @@
   var GAME = "arcade-game";
 
   var startedAt = null;
+  var startedPerf = null;
   var configCbs = [];
   var resultCbs = [];
   var config = null;
   var submitted = false;
+
+  /* ---------------- 검증 데이터 수집 ---------------- */
+
+  var MAX_SAMPLES = 40; // 점수 곡선은 40개면 모양을 보기에 충분합니다.
+
+  var trace = null;
+
+  function newTrace() {
+    return {
+      inputs: 0,        // 판 중 입력(포인터·키·터치) 횟수
+      firstInputMs: null, // 시작 후 첫 입력까지 (null 이면 입력이 아예 없었음)
+      samples: [],      // [경과ms, 점수] 쌍
+      hiddenMs: 0,      // 탭이 백그라운드였던 시간
+      hiddenAt: null,
+    };
+  }
+
+  function elapsed() {
+    // performance.now 는 단조 증가라 시스템 시계를 바꿔도 흔들리지 않습니다.
+    return startedPerf === null ? 0 : Math.round(performance.now() - startedPerf);
+  }
+
+  function onInput() {
+    if (!trace) return;
+    trace.inputs += 1;
+    if (trace.firstInputMs === null) trace.firstInputMs = elapsed();
+  }
+
+  ["pointerdown", "keydown", "touchstart"].forEach(function (type) {
+    // capture 로 받아야 게임이 stopPropagation 을 걸어도 놓치지 않습니다.
+    window.addEventListener(type, onInput, { capture: true, passive: true });
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (!trace) return;
+    if (document.hidden) {
+      trace.hiddenAt = performance.now();
+    } else if (trace.hiddenAt !== null) {
+      trace.hiddenMs += Math.round(performance.now() - trace.hiddenAt);
+      trace.hiddenAt = null;
+    }
+  });
+
+  function sealTrace(score) {
+    if (!trace) trace = newTrace();
+    if (trace.hiddenAt !== null) {
+      trace.hiddenMs += Math.round(performance.now() - trace.hiddenAt);
+      trace.hiddenAt = null;
+    }
+    var perfMs = elapsed();
+    var wallMs = startedAt === null ? perfMs : Date.now() - startedAt;
+    return {
+      sdk: 1,
+      inputs: trace.inputs,
+      firstInputMs: trace.firstInputMs,
+      samples: trace.samples,
+      hiddenMs: trace.hiddenMs,
+      perfMs: perfMs,   // 단조 시계 기준 플레이 시간
+      wallMs: wallMs,   // 시스템 시계 기준 — 둘이 어긋나면 시계를 건드린 것
+      finalScore: Number(score) || 0,
+      startedGame: startedPerf !== null, // start() 없이 gameOver 만 불렀는지
+    };
+  }
 
   function post(type, payload) {
     try {
@@ -78,14 +151,20 @@
     /** 새 판 시작 — 플레이 시간 측정을 시작합니다. */
     start: function () {
       startedAt = Date.now();
+      startedPerf = performance.now();
       submitted = false;
+      trace = newTrace();
       post("START", {});
       return this;
     },
 
     /** 진행 중 점수 (선택). 화면 상단 오버레이에 표시됩니다. */
     progress: function (score) {
-      post("PROGRESS", { score: Number(score) || 0 });
+      var value = Number(score) || 0;
+      if (trace && trace.samples.length < MAX_SAMPLES) {
+        trace.samples.push([elapsed(), value]);
+      }
+      post("PROGRESS", { score: value });
       return this;
     },
 
@@ -98,6 +177,7 @@
         score: Number(score) || 0,
         durationMs: Date.now() - startedAt,
         meta: meta && typeof meta === "object" ? meta : {},
+        trace: sealTrace(score),
       });
       return this;
     },

@@ -112,7 +112,7 @@ create table if not exists public.games (
   kind          game_kind   not null default 'official',
   status        game_status not null default 'draft',
   source        game_source not null default 'url',
-  entry_url     text,                      -- source='url' 일 때: /games/xxx/index.html
+  entry_url     text,                      -- source='url' 일 때: /g/xxx/index.html (앱 라우트 /games/[slug] 와 겹치지 않게 /g 아래에 둡니다)
   html          text,                      -- source='html' 일 때: 제출된 단일 HTML 문서
   author_id     uuid references public.profiles(id) on delete set null,
   hackathon_id  uuid references public.hackathons(id) on delete set null,
@@ -168,7 +168,11 @@ create table if not exists public.runs (
   user_id       uuid not null references public.profiles(id) on delete cascade,
   score         numeric not null,
   duration_ms   integer,
-  meta          jsonb not null default '{}'::jsonb,
+  meta          jsonb not null default '{}'::jsonb,   -- 게임이 준 정보 + SDK 검증 데이터(trace)
+  flags         text[] not null default '{}',          -- 서버가 자동으로 단 의심 표시
+  voided_at     timestamptz,                           -- 운영자가 무효 처리한 기록 (지우지 않고 남김)
+  voided_reason text,
+  voided_by     uuid references public.profiles(id) on delete set null,
   nonce         text unique,      -- 서명된 플레이 토큰의 1회용 값 (중복 제출 차단)
   created_at    timestamptz not null default now()
 );
@@ -176,6 +180,9 @@ create table if not exists public.runs (
 create index if not exists runs_game_score_idx  on public.runs(game_id, score desc);
 create index if not exists runs_tournament_idx  on public.runs(tournament_id, score desc);
 create index if not exists runs_user_idx        on public.runs(user_id, created_at desc);
+create index if not exists runs_flagged_idx
+  on public.runs (created_at desc)
+  where voided_at is null and array_length(flags, 1) > 0;
 
 -- ---------------------------------------------------------------------
 -- 6. 좋아요 / 댓글
@@ -253,6 +260,7 @@ with best as (
          r.game_id, r.user_id, r.score, r.duration_ms, r.created_at
   from public.runs r
   join public.games g on g.id = r.game_id
+  where r.voided_at is null
   order by r.game_id, r.user_id,
            case when g.scoring = 'high' then r.score end desc nulls last,
            case when g.scoring = 'low'  then r.score end asc  nulls last,
@@ -285,6 +293,7 @@ with valid as (
   from public.runs r
   join public.tournaments t on t.id = r.tournament_id
   where r.created_at >= t.starts_at and r.created_at <= t.ends_at
+    and r.voided_at is null
 ),
 best as (
   select distinct on (v.tournament_id, v.user_id)
@@ -404,6 +413,11 @@ drop policy if exists runs_insert on public.runs;
 drop policy if exists runs_delete on public.runs;
 create policy runs_read   on public.runs for select using (true);
 create policy runs_delete on public.runs for delete to authenticated using (public.is_staff());
+-- 운영자의 무효 처리(voided_*) 용. 점수 자체를 고치는 것도 가능하지만, 그건 운영자를
+-- 신뢰한다는 전제이고 이미 게임·대회를 만들 수 있는 사람입니다.
+drop policy if exists runs_update on public.runs;
+create policy runs_update on public.runs for update to authenticated
+  using (public.is_staff()) with check (public.is_staff());
 
 -- likes
 drop policy if exists likes_read   on public.likes;

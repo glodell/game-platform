@@ -288,7 +288,7 @@ function GameForm() {
   return (
     <form onSubmit={onSubmit} className="panel p-6 space-y-4">
       <p className="text-sm text-ink-400">
-        내가 만든 게임을 등록합니다. <code className="text-neon-400">public/games/</code> 폴더에 넣은
+        내가 만든 게임을 등록합니다. <code className="text-neon-400">public/g/</code> 폴더에 넣은
         게임은 경로만 적으면 되고, 단일 HTML 은 코드를 그대로 붙여넣어도 됩니다.
       </p>
 
@@ -299,7 +299,7 @@ function GameForm() {
       <Input name="tagline" label="한 줄 소개" />
       <Textarea name="description" label="설명" rows={3} />
       <Row>
-        <Input name="entry_url" label="게임 경로" placeholder="/games/reflex/index.html" />
+        <Input name="entry_url" label="게임 경로" placeholder="/g/reflex/index.html" />
         <Input name="thumbnail_url" label="썸네일 URL" placeholder="비우면 자동 생성" />
       </Row>
       <Textarea

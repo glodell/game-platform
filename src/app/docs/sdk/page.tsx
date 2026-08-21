@@ -11,7 +11,9 @@ const API = [
   { sig: "Arcade.start()", desc: "한 판이 시작될 때 호출하세요. 플레이 시간 측정이 시작됩니다." },
   {
     sig: "Arcade.progress(점수)",
-    desc: "진행 중 점수를 화면 왼쪽 위 오버레이에 표시합니다. 선택 사항입니다.",
+    desc:
+      "진행 중 점수를 화면 왼쪽 위 오버레이에 표시합니다. 선택 사항이지만, 이 값으로 점수 곡선이 " +
+      "남아 대회 기록 검증에 쓰이니 되도록 불러주세요.",
   },
   {
     sig: "Arcade.gameOver(점수, 부가정보?)",
@@ -146,6 +148,25 @@ export default function SdkDocsPage() {
           <li>· localStorage, cookie 는 쓸 수 없습니다 (점수는 플랫폼이 저장합니다)</li>
           <li>· 파일 크기는 400KB 까지</li>
         </ul>
+      </Section>
+
+      <Section title="6. 기록 검증">
+        <p className="text-ink-300 leading-relaxed">
+          대회는 상품이 걸리기 때문에, 판마다 얇은 검증 데이터가 점수와 함께 저장됩니다. SDK 가
+          알아서 모으므로 게임 코드에서 따로 할 일은 없습니다.
+        </p>
+        <ul className="mt-4 space-y-2 text-sm text-ink-400">
+          <li>· 입력 횟수와 첫 입력까지 걸린 시간</li>
+          <li>· Arcade.progress() 로 들어온 점수 곡선</li>
+          <li>· 두 시계(Date.now · performance.now)의 정합성</li>
+          <li>· 판 도중 탭이 백그라운드로 갔는지</li>
+        </ul>
+        <p className="text-sm text-ink-400 mt-4 leading-relaxed">
+          앞뒤가 안 맞는 기록에는 서버가 표시를 달아 운영자 검토 큐로 보냅니다. 개인을 식별할 수
+          있는 값은 모으지 않습니다. 게임을 만들 때는 <code className="text-neon-400">start()</code>
+          와 <code className="text-neon-400">progress()</code> 를 제때 불러주는 것만 신경 쓰면
+          됩니다 — 그래야 정상 플레이가 괜히 표시되는 일이 줄어듭니다.
+        </p>
       </Section>
 
       <div className="panel p-6 mt-12 text-center">

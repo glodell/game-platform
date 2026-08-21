@@ -36,5 +36,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|games/|sdk/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // 정적 게임(/g/…)과 SDK 는 세션 갱신이 필요 없으니 건너뜁니다.
+  //
+  // 예전에는 여기서 games/ 를 제외했는데, 그러면 정적 파일뿐 아니라 게임 상세 페이지
+  // (/games/[slug]) 까지 미들웨어를 안 타서 그 페이지에서만 로그인이 풀리곤 했습니다.
+  // 정적 게임을 /g 아래로 옮기면서 그 부작용도 같이 없앴습니다.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|g/|sdk/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

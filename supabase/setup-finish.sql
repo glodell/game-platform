@@ -19,7 +19,7 @@ drop policy if exists runs_insert on public.runs;
 
 
 -- ---------------------------------------------------------------------
--- 2. 기본 게임 (public/games/ 에 들어 있는 정적 게임)
+-- 2. 기본 게임 (public/g/ 에 들어 있는 정적 게임)
 -- ---------------------------------------------------------------------
 insert into public.games
   (slug, title, tagline, description, kind, status, source, entry_url, scoring, score_unit, tags, published_at)
@@ -29,7 +29,7 @@ values
     '반응속도 테스트',
     '초록으로 바뀌는 순간 누르세요. 5회 평균 기록으로 승부.',
     E'규칙\n1. 화면을 눌러 시작합니다.\n2. 빨강에서 초록으로 바뀌는 순간 최대한 빨리 누르세요.\n3. 5번의 평균 반응속도가 기록이 됩니다.\n\n초록 전에 누르면 그 라운드는 다시 합니다. 사람의 평균은 250ms 안팎입니다.',
-    'official', 'published', 'url', '/games/reflex/index.html',
+    'official', 'published', 'url', '/g/reflex/index.html',
     'low', 'ms', array['반응속도','간단'], now()
   ),
   (
@@ -37,7 +37,7 @@ values
     '운석 피하기',
     '점점 빨라지는 운석 사이에서 얼마나 오래 버틸 수 있나.',
     E'조작\n- 마우스 / 터치: 좌우로 움직이기\n- 키보드: ← → 또는 A D\n\n생존 시간과 피한 운석 수가 점수에 반영됩니다. 시간이 지날수록 운석이 빨라집니다.',
-    'official', 'published', 'url', '/games/dodge/index.html',
+    'official', 'published', 'url', '/g/dodge/index.html',
     'high', '점', array['액션','생존'], now()
   )
 on conflict (slug) do nothing;

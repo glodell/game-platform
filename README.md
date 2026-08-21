@@ -96,7 +96,7 @@ update profiles set role = 'owner' where handle = '내핸들';
 
 두 가지 방법 중 편한 쪽을 쓰면 됩니다.
 
-1. `public/games/<이름>/index.html` 에 파일을 넣고, 운영자 콘솔에서 경로 `/games/<이름>/index.html` 입력
+1. `public/g/<이름>/index.html` 에 파일을 넣고, 운영자 콘솔에서 경로 `/g/<이름>/index.html` 입력
 2. 운영자 콘솔의 **HTML 코드 직접 붙여넣기** 칸에 통째로 붙여넣기
 
 ### 구독자 제출

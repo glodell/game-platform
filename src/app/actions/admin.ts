@@ -106,6 +106,53 @@ export async function setGameThumbnail(gameId: string, rawUrl: string): Promise<
   return { ok: true, message: url ? "썸네일을 저장했습니다." : "썸네일을 지웠습니다." };
 }
 
+/**
+ * 기록 무효 처리 / 되돌리기.
+ *
+ * 지우지 않고 표시만 합니다. 지우면 (1) 대회 도전 횟수가 도로 늘어나고
+ * (2) 나중에 이의가 들어왔을 때 근거가 남지 않습니다.
+ * 랭킹 뷰가 voided_at is null 로 거르기 때문에 무효 처리하면 순위에서 바로 빠집니다.
+ */
+export async function voidRun(runId: string, reason: string): Promise<AdminResult> {
+  const { supabase, user, staff } = await requireStaff();
+  if (!staff || !user) return { ok: false, error: "권한이 없습니다." };
+
+  const trimmed = reason.trim();
+  if (!trimmed) return { ok: false, error: "무효 사유를 적어주세요." };
+  if (trimmed.length > 300) return { ok: false, error: "사유는 300자까지입니다." };
+
+  const { error } = await supabase
+    .from("runs")
+    .update({
+      voided_at: new Date().toISOString(),
+      voided_reason: trimmed,
+      voided_by: user.id,
+    })
+    .eq("id", runId);
+
+  if (error) return { ok: false, error: `처리 실패: ${error.message}` };
+
+  revalidatePath("/admin");
+  revalidatePath("/tournaments");
+  return { ok: true, message: "무효 처리했습니다. 랭킹에서 빠집니다." };
+}
+
+export async function restoreRun(runId: string): Promise<AdminResult> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return { ok: false, error: "권한이 없습니다." };
+
+  const { error } = await supabase
+    .from("runs")
+    .update({ voided_at: null, voided_reason: null, voided_by: null })
+    .eq("id", runId);
+
+  if (error) return { ok: false, error: `처리 실패: ${error.message}` };
+
+  revalidatePath("/admin");
+  revalidatePath("/tournaments");
+  return { ok: true, message: "되돌렸습니다." };
+}
+
 /** 공식 게임 등록 */
 export async function createOfficialGame(formData: FormData): Promise<AdminResult> {
   const { supabase, user, staff } = await requireStaff();

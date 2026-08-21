@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { verifyRunToken } from "@/lib/run-token";
 import { TOO_MANY, rateLimit } from "@/lib/rate-limit";
+import { evaluateRun, parseTrace } from "@/lib/run-trace";
 
 export const runtime = "nodejs";
 
@@ -17,14 +18,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  let body: { token?: string; score?: number; durationMs?: number; meta?: unknown };
+  let body: {
+    token?: string;
+    score?: number;
+    durationMs?: number;
+    meta?: unknown;
+    trace?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
-  const { token, score, durationMs, meta } = body;
+  const { token, score, durationMs, meta, trace: rawTrace } = body;
   if (!token) return NextResponse.json({ error: "플레이 토큰이 없습니다." }, { status: 400 });
 
   const numericScore = Number(score);
@@ -48,6 +55,23 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+
+  // 이 게임의 점수 방향(높을수록 좋은지)에 따라 판정 기준이 달라집니다.
+  const { data: game } = await supabase
+    .from("games")
+    .select("scoring")
+    .eq("id", payload.gid)
+    .single();
+
+  const trace = parseTrace(rawTrace);
+  const reportedDurationMs = Number.isFinite(Number(durationMs)) ? Math.round(Number(durationMs)) : null;
+  const flags = evaluateRun({
+    trace,
+    score: numericScore,
+    reportedDurationMs,
+    tokenIssuedAt: payload.iat,
+    scoringLow: game?.scoring === "low",
+  });
 
   // 대회 기록이면 마감 시간과 도전 횟수를 저장 직전에 다시 확인합니다.
   //
@@ -93,23 +117,37 @@ export async function POST(request: Request) {
     }
   }
 
-  const { data: run, error } = await admin
+  const runRow = {
+    game_id: payload.gid,
+    tournament_id: payload.tid,
+    user_id: user.id,
+    score: numericScore,
+    duration_ms: reportedDurationMs,
+    // 게임이 준 meta 와 SDK 가 모은 검증 데이터를 함께 남깁니다.
+    meta: {
+      ...(meta && typeof meta === "object" ? meta : {}),
+      trace,
+    },
+    nonce: payload.nonce,
+  };
+
+  let { data: run, error } = await admin
     .from("runs")
-    .insert({
-      game_id: payload.gid,
-      tournament_id: payload.tid,
-      user_id: user.id,
-      score: numericScore,
-      duration_ms: Number.isFinite(Number(durationMs)) ? Math.round(Number(durationMs)) : null,
-      meta: meta && typeof meta === "object" ? meta : {},
-      nonce: payload.nonce,
-    })
+    .insert({ ...runRow, flags })
     .select("id")
     .single();
 
-  if (error) {
+  // flags 컬럼은 supabase/run-verification.sql 을 실행해야 생깁니다.
+  // 아직 안 돌린 DB 에서도 점수 제출이 죽지 않도록, 컬럼이 없으면 그것만 빼고 다시 넣습니다.
+  // (검증 데이터 자체는 meta.trace 에 그대로 남습니다.)
+  if (error && (error.code === "PGRST204" || error.code === "42703")) {
+    console.warn("runs.flags 컬럼이 없습니다 — run-verification.sql 을 실행하세요.");
+    ({ data: run, error } = await admin.from("runs").insert(runRow).select("id").single());
+  }
+
+  if (error || !run) {
     // unique_violation — 같은 토큰으로 두 번 제출
-    if (error.code === "23505") {
+    if (error?.code === "23505") {
       return NextResponse.json({ error: "이미 제출된 기록입니다." }, { status: 409 });
     }
     return NextResponse.json({ error: "기록 저장에 실패했습니다." }, { status: 500 });

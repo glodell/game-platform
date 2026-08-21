@@ -93,7 +93,12 @@ export function GameFrame({
   }, []);
 
   const submitScore = useCallback(
-    async (score: number, durationMs: number, meta: Record<string, unknown>) => {
+    async (
+      score: number,
+      durationMs: number,
+      meta: Record<string, unknown>,
+      trace: unknown,
+    ) => {
       setLiveScore(score);
 
       if (!viewer) {
@@ -116,7 +121,7 @@ export function GameFrame({
         const res = await fetch("/api/runs/submit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, score, durationMs, meta }),
+          body: JSON.stringify({ token, score, durationMs, meta, trace }),
         });
         const json = await res.json();
         if (res.ok) {
@@ -215,6 +220,7 @@ export function GameFrame({
             Number(data.payload?.score) || 0,
             Number(data.payload?.durationMs) || 0,
             (data.payload?.meta as Record<string, unknown>) ?? {},
+            data.payload?.trace,
           );
           break;
       }
