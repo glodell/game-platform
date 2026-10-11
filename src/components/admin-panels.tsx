@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   createHackathon,
   createOfficialGame,
   createTournament,
+  deleteNote,
   reviewSubmission,
+  saveNote,
   setGameThumbnail,
   type AdminResult,
 } from "@/app/actions/admin";
 import { FEATURES } from "@/lib/site";
+import { GameUploader } from "./game-uploader";
 import { Badge } from "./ui";
 
 /* ------------------------------------------------------------------ */
@@ -236,7 +239,18 @@ const TABS = [
   { key: "hackathon", label: "해커톤 개설", on: FEATURES.hackathons },
 ].filter((t) => t.on) as { key: TabKey; label: string }[];
 
-export function AdminForms({ games }: { games: { id: string; title: string }[] }) {
+export function AdminForms({
+  games,
+  allGames = games,
+  newFolders = [],
+}: {
+  /** 공개된 게임 (대회를 열 수 있는 대상) */
+  games: { id: string; title: string }[];
+  /** 아직 공개 전인 것까지 포함한 게임 (파일을 교체할 수 있는 대상) */
+  allGames?: { id: string; title: string }[];
+  /** public/g 에 들어 있지만 아직 게임으로 등록하지 않은 폴더 이름 */
+  newFolders?: string[];
+}) {
   const [tab, setTab] = useState<TabKey>("game");
 
   return (
@@ -261,7 +275,7 @@ export function AdminForms({ games }: { games: { id: string; title: string }[] }
         <h2 className="font-black text-lg mb-4">{TABS[0].label}</h2>
       )}
 
-      {tab === "game" && <GameForm />}
+      {tab === "game" && <GameForm games={allGames} newFolders={newFolders} />}
       {tab === "tournament" && <TournamentForm games={games} />}
       {tab === "hackathon" && <HackathonForm />}
     </section>
@@ -290,15 +304,47 @@ function useAction(action: (fd: FormData) => Promise<AdminResult>) {
   return { state, pending, onSubmit };
 }
 
-function GameForm() {
+function GameForm({
+  games,
+  newFolders,
+}: {
+  games: { id: string; title: string }[];
+  newFolders: string[];
+}) {
   const { state, pending, onSubmit } = useAction(createOfficialGame);
+  // 폴더를 올리면 이 칸이 자동으로 채워집니다. 직접 적어도 됩니다.
+  const [entryUrl, setEntryUrl] = useState("");
+
+  // 등록이 끝나면 폼의 다른 칸처럼 이 칸도 비웁니다.
+  useEffect(() => {
+    if (state?.ok) setEntryUrl("");
+  }, [state]);
 
   return (
     <form onSubmit={onSubmit} className="panel p-6 space-y-4">
       <p className="text-sm text-ink-400">
-        내가 만든 게임을 등록합니다. <code className="text-neon-400">public/g/</code> 폴더에 넣은
-        게임은 경로만 적으면 되고, 단일 HTML 은 코드를 그대로 붙여넣어도 됩니다.
+        내가 만든 게임을 등록합니다. 파일이 여러 개인 게임(3D 모델 · 그림 포함)은 폴더를 올리고,
+        단일 HTML 은 아래에 코드를 그대로 붙여넣어도 됩니다.
       </p>
+
+      <GameUploader games={games} onUploaded={setEntryUrl} />
+
+      {newFolders.length > 0 && (
+        <div className="rounded-xl border border-lime-glow/40 bg-lime-glow/10 px-4 py-3 text-sm text-lime-glow">
+          아직 등록하지 않은 게임 폴더가 있습니다. 게임 경로 칸에 그대로 넣으세요.
+          <ul className="mt-1.5 space-y-0.5 font-mono text-xs">
+            {newFolders.map((folder) => (
+              <li key={folder}>/g/{folder}/index.html</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {/* 게임 경로 칸의 자동완성 */}
+      <datalist id="game-folders">
+        {newFolders.map((folder) => (
+          <option key={folder} value={`/g/${folder}/index.html`} />
+        ))}
+      </datalist>
 
       <Row>
         <Input name="title" label="게임 이름" required />
@@ -307,7 +353,14 @@ function GameForm() {
       <Input name="tagline" label="한 줄 소개" />
       <Textarea name="description" label="설명" rows={3} />
       <Row>
-        <Input name="entry_url" label="게임 경로" placeholder="/g/reflex/index.html" />
+        <Input
+          name="entry_url"
+          label="게임 경로"
+          placeholder="폴더를 올리면 자동으로 채워집니다"
+          list="game-folders"
+          value={entryUrl}
+          onChange={(event) => setEntryUrl(event.target.value)}
+        />
         <Input name="thumbnail_url" label="썸네일 URL" placeholder="비우면 자동 생성" />
       </Row>
       <Textarea
@@ -429,6 +482,239 @@ function HackathonForm() {
 }
 
 /* ------------------------------------------------------------------ */
+/* 제작 노트                                                            */
+/* ------------------------------------------------------------------ */
+
+export type AdminNote = {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string | null;
+  body: string;
+  cover_url: string | null;
+  video_url: string | null;
+  game_id: string | null;
+  is_published: boolean;
+  /** 서버에서 미리 만든 날짜 글자 (공개일, 없으면 작성일) */
+  dateLabel: string;
+};
+
+export function NotesManager({
+  notes,
+  games,
+  ready,
+}: {
+  notes: AdminNote[];
+  games: { id: string; title: string }[];
+  /** notes 테이블이 있는지 — 없으면 supabase/notes.sql 안내를 띄웁니다. */
+  ready: boolean;
+}) {
+  // null: 목록, "new": 새 글, 그 외: 고치는 중인 노트
+  const [editing, setEditing] = useState<AdminNote | "new" | null>(null);
+
+  return (
+    <section className="mt-14">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <h2 className="font-black text-lg">제작 노트</h2>
+        {editing === null && ready && (
+          <button
+            type="button"
+            onClick={() => setEditing("new")}
+            className="rounded-lg bg-ink-100 text-ink-950 px-4 py-2 text-sm font-semibold hover:bg-white transition-colors"
+          >
+            새 노트 쓰기
+          </button>
+        )}
+      </div>
+      <p className="text-sm text-ink-400 mb-4">
+        게임을 어떻게 만들었는지 남기는 글입니다. 비공개로 저장해 두면 운영자만 볼 수 있어서,
+        실제 화면에서 확인한 뒤 공개할 수 있습니다.
+      </p>
+
+      {!ready ? (
+        <p className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold">
+          노트를 저장할 테이블이 아직 없습니다. Supabase SQL Editor 에서{" "}
+          <code className="font-mono">supabase/notes.sql</code> 을 한 번 실행하면 여기서 글을 쓸 수
+          있습니다.
+        </p>
+      ) : editing !== null ? (
+        <NoteForm
+          key={editing === "new" ? "new" : editing.id}
+          note={editing === "new" ? null : editing}
+          games={games}
+          onClose={() => setEditing(null)}
+        />
+      ) : notes.length === 0 ? (
+        <p className="panel px-5 py-8 text-center text-sm text-ink-400">아직 쓴 노트가 없습니다.</p>
+      ) : (
+        <ul className="space-y-3">
+          {notes.map((note) => (
+            <NoteRow key={note.id} note={note} onEdit={() => setEditing(note)} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function NoteRow({ note, onEdit }: { note: AdminNote; onEdit: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  function remove() {
+    if (!window.confirm(`"${note.title}" 노트를 지울까요? 되돌릴 수 없습니다.`)) return;
+    startTransition(async () => {
+      const res = await deleteNote(note.id);
+      if (res.ok) router.refresh();
+      else setError(res.error);
+    });
+  }
+
+  return (
+    <li className="panel p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/notes/${note.slug}`}
+              target="_blank"
+              className="font-bold hover:text-neon-400 transition-colors"
+            >
+              {note.title}
+            </Link>
+            {note.is_published ? <Badge tone="lime">공개</Badge> : <Badge tone="gold">비공개</Badge>}
+          </div>
+          <p className="text-xs text-ink-600 mt-1.5">{note.dateLabel}</p>
+        </div>
+
+        <div className="flex gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={pending}
+            className="rounded-lg border border-ink-700 px-3 py-2 text-xs font-semibold hover:border-neon-400/50 transition-colors disabled:opacity-50"
+          >
+            수정
+          </button>
+          <button
+            type="button"
+            onClick={remove}
+            disabled={pending}
+            className="rounded-lg border border-punch-500/40 text-punch-400 px-3 py-2 text-xs font-semibold hover:bg-punch-500/10 transition-colors disabled:opacity-50"
+          >
+            {pending ? "지우는 중…" : "삭제"}
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-xs text-punch-400 mt-2">{error}</p>}
+    </li>
+  );
+}
+
+function NoteForm({
+  note,
+  games,
+  onClose,
+}: {
+  note: AdminNote | null;
+  games: { id: string; title: string }[];
+  onClose: () => void;
+}) {
+  const [state, setState] = useState<AdminResult | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const res = await saveNote(formData);
+      setState(res);
+      if (res.ok) {
+        router.refresh();
+        onClose();
+      }
+    });
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="panel p-6 space-y-4">
+      {note && <input type="hidden" name="id" value={note.id} />}
+
+      <Row>
+        <Input name="title" label="제목" required defaultValue={note?.title ?? ""} />
+        <Input
+          name="slug"
+          label="주소 슬러그"
+          defaultValue={note?.slug ?? ""}
+          placeholder="비우면 제목으로 자동 생성"
+        />
+      </Row>
+      <Textarea
+        name="summary"
+        label="요약"
+        rows={2}
+        defaultValue={note?.summary ?? ""}
+        hint="목록 카드와 검색 결과에 나오는 한두 줄 (300자까지)"
+      />
+      <Row>
+        <Input
+          name="video_url"
+          label="쇼츠 · 유튜브 주소"
+          defaultValue={note?.video_url ?? ""}
+          placeholder="https://www.youtube.com/shorts/…"
+        />
+        <Input
+          name="cover_url"
+          label="표지 이미지 URL"
+          defaultValue={note?.cover_url ?? ""}
+          placeholder="비우면 영상 썸네일"
+        />
+      </Row>
+      <Select name="game_id" label="연결할 게임" defaultValue={note?.game_id ?? ""}>
+        <option value="">연결 안 함</option>
+        {games.map((g) => (
+          <option key={g.id} value={g.id}>
+            {g.title}
+          </option>
+        ))}
+      </Select>
+      <Textarea
+        name="body"
+        label="본문"
+        rows={18}
+        mono
+        defaultValue={note?.body ?? ""}
+        placeholder={"## 어떻게 시작했나\n\n처음 떠올린 아이디어는…\n\n- 막혔던 점\n- 해결한 방법"}
+        hint="문단은 빈 줄로 나눕니다. ## 소제목 · - 목록 · **굵게** · [글자](주소) · ``` 코드 ``` 를 쓸 수 있고, 유튜브 주소나 이미지 주소만 한 줄에 적으면 플레이어와 그림으로 들어갑니다."
+      />
+
+      <Checkbox name="is_published" label="공개하기" defaultChecked={note?.is_published ?? false} />
+
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-xl bg-ink-100 text-ink-950 px-5 py-2.5 text-sm font-bold hover:bg-white transition-colors disabled:opacity-50"
+        >
+          {pending ? "저장 중…" : note ? "수정 저장" : "노트 저장"}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={pending}
+          className="text-sm text-ink-400 hover:text-ink-100 transition-colors disabled:opacity-40"
+        >
+          취소
+        </button>
+        {state && !state.ok && <span className="text-sm text-punch-400">{state.error}</span>}
+      </div>
+    </form>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* 폼 프리미티브                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -506,16 +792,18 @@ function Select({
   name,
   label,
   required,
+  defaultValue,
   children,
 }: {
   name: string;
   label: string;
   required?: boolean;
+  defaultValue?: string;
   children: React.ReactNode;
 }) {
   return (
     <Label label={label} required={required}>
-      <select name={name} required={required} className={inputClass}>
+      <select name={name} required={required} defaultValue={defaultValue} className={inputClass}>
         {children}
       </select>
     </Label>

@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatScore } from "@/lib/format";
-import { GAME_SANDBOX } from "@/lib/sandbox";
+import {
+  GAME_ALLOW,
+  GAME_ALLOW_TRUSTED,
+  GAME_SANDBOX,
+  GAME_SANDBOX_ISOLATED,
+} from "@/lib/sandbox";
 
 type Viewer = { id: string; display_name: string } | null;
 
@@ -13,6 +18,8 @@ type Props = {
   /** source='url' 이면 entryUrl, source='html' 이면 srcDoc 이 채워집니다. */
   entryUrl?: string | null;
   srcDoc?: string | null;
+  /** 게임 전용 주소에서 내려주는 폴더 게임 — 자기 오리진을 줍니다 (resolveGameEntry 가 정함). */
+  isolated?: boolean;
   viewer: Viewer;
   tournament?: { id: string; title: string; endsAt: string } | null;
   attemptsLeft?: number | null;
@@ -30,6 +37,7 @@ export function GameFrame({
   scoreUnit,
   entryUrl,
   srcDoc,
+  isolated = false,
   viewer,
   tournament,
   attemptsLeft,
@@ -274,8 +282,9 @@ export function GameFrame({
           ref={frameRef}
           title={title}
           className="absolute inset-0 size-full"
-          sandbox={GAME_SANDBOX}
-          allow="autoplay; gamepad"
+          // 붙여넣은 HTML(srcdoc)은 이 페이지의 오리진을 물려받으므로 절대 자기 오리진을 주지 않습니다.
+          sandbox={isolated && !srcDoc ? GAME_SANDBOX_ISOLATED : GAME_SANDBOX}
+          allow={srcDoc ? GAME_ALLOW : GAME_ALLOW_TRUSTED}
           {...(srcDoc ? { srcDoc } : { src: entryUrl ?? "about:blank" })}
         />
 

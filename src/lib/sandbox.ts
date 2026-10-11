@@ -13,6 +13,21 @@ export const GAME_SANDBOX = [
   "allow-modals",
 ].join(" ");
 
+/**
+ * 폴더 게임(/g/…)을 "게임 전용 주소"에서 내려줄 때만 쓰는 권한.
+ *
+ * allow-same-origin 이 없으면 게임은 오리진이 없는(opaque) 상태라 localStorage · IndexedDB ·
+ * 주소로 만드는 Web Worker 가 전부 SecurityError 로 막힙니다. 이걸 주면 풀리지만, 게임을
+ * 이 사이트와 같은 주소에서 내려주는 한 그 오리진이 곧 이 사이트라 쿠키 · 세션이 통째로
+ * 열립니다. 그래서 다른 주소(gameOrigin)에서 내려줄 때만 씁니다 — 그러면 게임은 자기
+ * 주소의 저장소만 갖고 이 사이트에는 손대지 못합니다. resolveGameEntry() 가 그 조건을 지킵니다.
+ */
+export const GAME_SANDBOX_ISOLATED = `${GAME_SANDBOX} allow-same-origin`;
+
+/** 게임 iframe 의 allow 속성. 전체화면은 운영자가 올린 게임에만 줍니다. */
+export const GAME_ALLOW = "autoplay; gamepad";
+export const GAME_ALLOW_TRUSTED = `${GAME_ALLOW}; fullscreen`;
+
 const CSP = [
   "default-src 'none'",
   "img-src data: blob:",
@@ -77,4 +92,68 @@ export function siteUrl() {
   if (vercelHost) return `https://${vercelHost}`;
 
   return "http://localhost:3000";
+}
+
+function originOf(value: string | undefined | null): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 폴더 게임(/g/…)을 내려주는 게임 전용 주소. 없으면 null.
+ *
+ * 운영에서는 NEXT_PUBLIC_GAME_ORIGIN 으로 정합니다 (예: https://play.viberhood.io).
+ * 같은 배포에 붙인 두 번째 도메인이면 되고, 그 주소에서는 미들웨어가 게임 파일만 내려줍니다.
+ * 정하지 않으면 예전처럼 이 사이트 주소에서 오리진 없는 샌드박스로 돕니다.
+ *
+ * 개발 중에는 따로 정하지 않아도 localhost ↔ 127.0.0.1 을 맞바꿔 씁니다. 둘은 같은 서버지만
+ * 브라우저에게는 다른 오리진이라, 운영과 같은 조건으로 확인할 수 있습니다.
+ */
+export function gameOrigin(): string | null {
+  const explicit = originOf(process.env.NEXT_PUBLIC_GAME_ORIGIN);
+  if (explicit) return explicit;
+
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const site = new URL(siteUrl());
+      if (site.hostname === "localhost") site.hostname = "127.0.0.1";
+      else if (site.hostname === "127.0.0.1") site.hostname = "localhost";
+      else return null;
+      return site.origin;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * 게임 전용 주소가 "이 사이트와 다른 주소로" 준비돼 있을 때만 그 주소를 돌려줍니다.
+ * 같은 주소로 잘못 설정된 경우를 여기서 걸러서, allow-same-origin 이 이 사이트에 열리는 일을 막습니다.
+ */
+export function isolatedGameOrigin(): string | null {
+  const games = gameOrigin();
+  return games && games !== originOf(siteUrl()) ? games : null;
+}
+
+/**
+ * 게임을 실제로 띄울 주소와, 그 프레임에 자기 오리진을 줘도 되는지를 정합니다.
+ *
+ * 자기 오리진을 받는 것은 이 저장소의 폴더 게임(/g/…)을 게임 전용 주소에서 내려줄 때뿐입니다.
+ * 붙여넣은 HTML(srcdoc)과 외부 주소는 지금처럼 오리진 없는 샌드박스에 둡니다.
+ */
+export function resolveGameEntry(entryUrl: string | null | undefined): {
+  url: string | null;
+  isolated: boolean;
+} {
+  const games = isolatedGameOrigin();
+  // ".." 로 /g 밖을 가리키는 경로는 게임 파일이 아니므로 자기 오리진을 주지 않습니다.
+  if (games && entryUrl?.startsWith("/g/") && !entryUrl.includes("..")) {
+    return { url: `${games}${entryUrl}`, isolated: true };
+  }
+  return { url: entryUrl ?? null, isolated: false };
 }

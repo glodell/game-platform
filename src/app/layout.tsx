@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SetupGuide } from "@/components/setup-guide";
 import { SocialLinks } from "@/components/social-links";
 import { isSupabaseConfigured } from "@/lib/env";
 import { siteUrl } from "@/lib/sandbox";
+import { FOOTER_LINKS } from "@/lib/site";
 
 const TITLE = "바이버후드 — AI로 만든 3D 게임 체험관";
 const DESCRIPTION =
@@ -50,7 +52,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="flex-1">{configured ? children : <SetupGuide />}</main>
         <footer className="border-t border-ink-800 mt-24">
           <div className="mx-auto max-w-6xl px-5 py-10 text-sm text-ink-400 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} 바이버후드. 바이브코딩으로 노는 이웃들.</p>
+            <div className="space-y-3">
+              <p>© {new Date().getFullYear()} 바이버후드. 바이브코딩으로 노는 이웃들.</p>
+              {/* 메뉴가 아니라 안내 링크입니다 — 정책 페이지는 어느 화면에서든 닿아야 합니다. */}
+              <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                {FOOTER_LINKS.map((item) => (
+                  <li key={item.href}>
+                    <Link href={item.href} className="hover:text-ink-100 transition-colors">
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
             <SocialLinks />
           </div>
         </footer>

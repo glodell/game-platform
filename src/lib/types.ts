@@ -115,6 +115,23 @@ export type Comment = {
   author?: Pick<Profile, "handle" | "display_name" | "avatar_url"> | null;
 };
 
+/** 제작 노트 — 게임을 어떻게 만들었는지 남기는 글. 목록에서는 body 없이 옵니다. */
+export type Note = {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string | null;
+  body?: string;
+  cover_url: string | null;
+  video_url: string | null;
+  game_id: string | null;
+  is_published: boolean;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+  game?: Pick<Game, "slug" | "title" | "tagline" | "thumbnail_url" | "kind" | "status"> | null;
+};
+
 export type Phase = "upcoming" | "live" | "ended";
 
 export function phaseOf(startsAt: string, endsAt: string, now = Date.now()): Phase {

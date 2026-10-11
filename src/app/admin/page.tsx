@@ -1,9 +1,15 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { AdminForms, ReviewRow, ThumbnailManager } from "@/components/admin-panels";
+import {
+  AdminForms,
+  NotesManager,
+  ReviewRow,
+  ThumbnailManager,
+  type AdminNote,
+} from "@/components/admin-panels";
 import { RunReview, type ReviewRun } from "@/components/run-review";
 import { parseTrace } from "@/lib/run-trace";
-import { formatRelative } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
 import { getViewer } from "@/lib/queries";
 import { FEATURES } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
@@ -37,7 +43,12 @@ export default async function AdminPage() {
   }
 
   const supabase = await createClient();
-  const [{ data: pendingRows }, { data: games }, { data: runs }] = await Promise.all([
+  const [
+    { data: pendingRows },
+    { data: games },
+    { data: runs },
+    { data: noteRows, error: notesError },
+  ] = await Promise.all([
     supabase
       .from("games")
       .select(
@@ -48,7 +59,7 @@ export default async function AdminPage() {
     // 썸네일은 공개 전 제출작에도 미리 달아둘 수 있어야 해서 반려 건만 뺍니다.
     supabase
       .from("games")
-      .select("id, title, slug, thumbnail_url, status")
+      .select("id, title, slug, thumbnail_url, status, entry_url")
       .in("status", ["published", "pending", "draft"])
       .order("title"),
     // 검토 큐는 최근 것만 봅니다 — 오래된 기록까지 훑을 일은 거의 없습니다.
@@ -62,7 +73,28 @@ export default async function AdminPage() {
       )
       .order("created_at", { ascending: false })
       .limit(120),
+    supabase
+      .from("notes")
+      .select(
+        "id, slug, title, summary, body, cover_url, video_url, game_id, is_published, published_at, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(100),
   ]);
+
+  // notes 테이블은 supabase/notes.sql 을 실행해야 생깁니다 — 없으면 조회가 오류로 끝납니다.
+  const notes: AdminNote[] = (noteRows ?? []).map((n) => ({
+    id: n.id,
+    slug: n.slug,
+    title: n.title,
+    summary: n.summary,
+    body: n.body,
+    cover_url: n.cover_url,
+    video_url: n.video_url,
+    game_id: n.game_id,
+    is_published: n.is_published,
+    dateLabel: formatDate(n.published_at ?? n.created_at),
+  }));
 
   const reviewRuns: ReviewRun[] = (runs ?? []).map((row) => {
     const r = row as unknown as {
@@ -99,8 +131,17 @@ export default async function AdminPage() {
   const pending = pendingRows ?? [];
   const hasPending = pending.length > 0;
 
+  const publishedGames = (games ?? []).filter((g) => g.status === "published");
+
+  // public/g 에 넣었지만 아직 게임으로 등록하지 않은 폴더 (목록은 빌드할 때 next.config 가 읽습니다)
+  const registered = new Set((games ?? []).map((g) => g.entry_url));
+  const newFolders = (process.env.GAME_FOLDERS ?? "")
+    .split(",")
+    .filter((folder) => folder && !registered.has(`/g/${folder}/index.html`));
+
   const tasks = [
     "게임 등록",
+    "제작 노트 작성",
     ...(FEATURES.tournaments ? ["대회 개설"] : []),
     ...(FEATURES.hackathons ? ["해커톤 개설"] : []),
     ...(FEATURES.community ? ["제출작 심사"] : []),
@@ -145,7 +186,9 @@ export default async function AdminPage() {
         </section>
       )}
 
-      <AdminForms games={(games ?? []).filter((g) => g.status === "published")} />
+      <AdminForms games={publishedGames} allGames={games ?? []} newFolders={newFolders} />
+
+      <NotesManager notes={notes} games={publishedGames} ready={!notesError} />
 
       <RunReview runs={reviewRuns} />
 

@@ -1,20 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireStaff } from "@/lib/staff";
+import { parseYouTube } from "@/lib/youtube";
 
 export type AdminResult = { ok: true; message: string } | { ok: false; error: string };
-
-async function requireStaff() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { supabase, user: null, staff: false };
-
-  const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  return { supabase, user, staff: data?.role === "owner" || data?.role === "moderator" };
-}
 
 function slugify(input: string, fallback: string) {
   const base = input
@@ -37,6 +27,16 @@ function parsePrizes(raw: string) {
       if (match) return { rank: Number(match[1]), reward: match[2].trim() };
       return { rank: index + 1, reward: line };
     });
+}
+
+/** img src 에 넣어도 되는 주소인지 — http(s) 와 사이트 내부 경로(/…)만 받습니다. */
+function isImageUrl(url: string) {
+  if (url.startsWith("/")) return true;
+  try {
+    return ["http:", "https:"].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
 }
 
 /** 구독자 제출작 승인 / 반려 */
@@ -76,16 +76,7 @@ export async function setGameThumbnail(gameId: string, rawUrl: string): Promise<
 
   const url = rawUrl.trim();
   if (url) {
-    const allowed =
-      url.startsWith("/") ||
-      (() => {
-        try {
-          return ["http:", "https:"].includes(new URL(url).protocol);
-        } catch {
-          return false;
-        }
-      })();
-    if (!allowed) {
+    if (!isImageUrl(url)) {
       return { ok: false, error: "http(s) 주소나 / 로 시작하는 내부 경로만 넣을 수 있습니다." };
     }
     if (url.length > 2000) return { ok: false, error: "주소가 너무 깁니다." };
@@ -164,7 +155,7 @@ export async function createOfficialGame(formData: FormData): Promise<AdminResul
 
   if (title.length < 2) return { ok: false, error: "게임 이름을 입력해 주세요." };
   if (!entryUrl && !html) {
-    return { ok: false, error: "게임 경로(/games/...)나 HTML 코드 중 하나는 있어야 합니다." };
+    return { ok: false, error: "게임 폴더를 올리거나, 게임 경로 · HTML 코드 중 하나를 넣어주세요." };
   }
 
   const { error } = await supabase.from("games").insert({
@@ -270,4 +261,121 @@ export async function createHackathon(formData: FormData): Promise<AdminResult> 
   revalidatePath("/admin");
   revalidatePath("/hackathons");
   return { ok: true, message: "해커톤을 열었습니다." };
+}
+
+/* ------------------------------------------------------------------ */
+/* 제작 노트                                                            */
+/* ------------------------------------------------------------------ */
+
+const NOTE_BODY_MAX = 50_000;
+
+// notes 테이블은 supabase/notes.sql 을 실행해야 생깁니다.
+const NOTES_NOT_READY: AdminResult = {
+  ok: false,
+  error: "notes 테이블이 없습니다. Supabase SQL Editor 에서 supabase/notes.sql 을 실행해 주세요.",
+};
+
+function isMissingTable(error: { code?: string } | null) {
+  return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
+/** 제작 노트 저장 — id 가 있으면 고치고, 없으면 새로 만듭니다. */
+export async function saveNote(formData: FormData): Promise<AdminResult> {
+  const { supabase, user, staff } = await requireStaff();
+  if (!staff || !user) return { ok: false, error: "권한이 없습니다." };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const slugInput = String(formData.get("slug") ?? "").trim();
+  const summary = String(formData.get("summary") ?? "").trim();
+  const body = String(formData.get("body") ?? "").replace(/\r\n?/g, "\n").trim();
+  const coverUrl = String(formData.get("cover_url") ?? "").trim();
+  const videoUrl = String(formData.get("video_url") ?? "").trim();
+  const gameId = String(formData.get("game_id") ?? "").trim();
+  const publish = formData.get("is_published") === "on";
+
+  if (!title) return { ok: false, error: "제목을 입력해 주세요." };
+  if (title.length > 120) return { ok: false, error: "제목은 120자까지입니다." };
+  if (summary.length > 300) return { ok: false, error: "요약은 300자까지입니다." };
+  if (!body) return { ok: false, error: "본문을 입력해 주세요." };
+  if (body.length > NOTE_BODY_MAX) return { ok: false, error: "본문이 너무 깁니다 (5만 자까지)." };
+  if (coverUrl && (!isImageUrl(coverUrl) || coverUrl.length > 2000)) {
+    return { ok: false, error: "표지는 http(s) 주소나 / 로 시작하는 내부 경로만 넣을 수 있습니다." };
+  }
+  if (videoUrl && !parseYouTube(videoUrl)) {
+    return { ok: false, error: "영상은 유튜브 주소만 넣을 수 있습니다 (쇼츠 주소 포함)." };
+  }
+
+  const now = new Date().toISOString();
+  const fields = {
+    title,
+    summary: summary || null,
+    body,
+    cover_url: coverUrl || null,
+    video_url: videoUrl || null,
+    game_id: gameId || null,
+    is_published: publish,
+    updated_at: now,
+  };
+
+  let slug: string;
+  let error: { code?: string; message: string } | null;
+
+  if (id) {
+    const { data: existing, error: readError } = await supabase
+      .from("notes")
+      .select("slug, published_at")
+      .eq("id", id)
+      .maybeSingle();
+    if (isMissingTable(readError)) return NOTES_NOT_READY;
+    if (!existing) return { ok: false, error: "노트를 찾을 수 없습니다." };
+
+    // 주소 칸을 비워두면 기존 주소를 유지합니다 — 이미 공유된 링크가 죽지 않게.
+    slug = slugInput ? slugify(slugInput, "note") : existing.slug;
+    ({ error } = await supabase
+      .from("notes")
+      .update({ ...fields, slug, published_at: existing.published_at ?? (publish ? now : null) })
+      .eq("id", id));
+
+    if (!error && slug !== existing.slug) revalidatePath(`/notes/${existing.slug}`);
+  } else {
+    slug = slugify(slugInput || title, "note");
+    ({ error } = await supabase
+      .from("notes")
+      .insert({ ...fields, slug, author_id: user.id, published_at: publish ? now : null }));
+  }
+
+  if (error) {
+    if (isMissingTable(error)) return NOTES_NOT_READY;
+    if (error.code === "23505") {
+      return { ok: false, error: "같은 주소의 노트가 이미 있습니다. 주소 슬러그를 바꿔주세요." };
+    }
+    return { ok: false, error: `저장 실패: ${error.message}` };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/notes");
+  revalidatePath(`/notes/${slug}`);
+  revalidatePath("/");
+  return { ok: true, message: publish ? "공개로 저장했습니다." : "비공개로 저장했습니다." };
+}
+
+export async function deleteNote(noteId: string): Promise<AdminResult> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return { ok: false, error: "권한이 없습니다." };
+
+  const { data, error } = await supabase
+    .from("notes")
+    .delete()
+    .eq("id", noteId)
+    .select("slug")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: `삭제 실패: ${error.message}` };
+
+  revalidatePath("/admin");
+  revalidatePath("/notes");
+  if (data) revalidatePath(`/notes/${data.slug}`);
+  revalidatePath("/");
+  return { ok: true, message: "노트를 지웠습니다." };
 }

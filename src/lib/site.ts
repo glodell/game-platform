@@ -18,8 +18,22 @@ export const FEATURES: Record<"tournaments" | "hackathons" | "community", boolea
   community: false,
 };
 
+/**
+ * 문의 · 개인정보 보호책임자 연락처. 소개 · 이용약관 · 개인정보처리방침에 그대로 찍힙니다.
+ * 비워두면 이메일 대신 채널(유튜브 · 인스타그램)로 안내합니다.
+ */
+export const CONTACT_EMAIL = "glodellism@gmail.com";
+
+/** 푸터에 항상 깔리는 안내 링크 — 정책 페이지는 어느 화면에서든 닿아야 합니다. */
+export const FOOTER_LINKS = [
+  { href: "/about", label: "소개" },
+  { href: "/terms", label: "이용약관" },
+  { href: "/privacy", label: "개인정보처리방침" },
+];
+
 export const NAV = [
   { href: "/games", label: "게임", on: true },
+  { href: "/notes", label: "제작 노트", on: true },
   { href: "/tournaments", label: "대회", on: FEATURES.tournaments },
   { href: "/hackathons", label: "해커톤", on: FEATURES.hackathons },
   { href: "/docs/sdk", label: "만들기", on: FEATURES.community },

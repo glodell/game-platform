@@ -12,7 +12,7 @@ import {
   getTournamentLeaderboard,
   getViewer,
 } from "@/lib/queries";
-import { siteUrl, wrapUserGame } from "@/lib/sandbox";
+import { resolveGameEntry, siteUrl, wrapUserGame } from "@/lib/sandbox";
 import { phaseOf, type Prize } from "@/lib/types";
 
 export async function generateMetadata({
@@ -53,6 +53,7 @@ export default async function TournamentDetailPage({
 
   const myRow = viewer ? rows.find((r) => r.user_id === viewer.id) : undefined;
   const srcDoc = game.source === "html" && game.html ? wrapUserGame(game.html, siteUrl()) : null;
+  const entry = resolveGameEntry(game.entry_url);
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-10">
@@ -121,7 +122,8 @@ export default async function TournamentDetailPage({
                 gameId={game.id}
                 title={game.title}
                 scoreUnit={game.score_unit}
-                entryUrl={game.entry_url}
+                entryUrl={entry.url}
+                isolated={entry.isolated}
                 srcDoc={srcDoc}
                 viewer={viewer ? { id: viewer.id, display_name: viewer.display_name } : null}
                 tournament={{

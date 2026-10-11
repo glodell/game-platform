@@ -206,6 +206,26 @@ create table if not exists public.comments (
 
 create index if not exists comments_game_idx on public.comments(game_id, created_at desc);
 
+-- 제작 노트 — 게임을 어떻게 만들었는지 남기는 글 (운영 중인 DB 에는 notes.sql 로 추가)
+create table if not exists public.notes (
+  id           uuid primary key default gen_random_uuid(),
+  slug         text unique not null,
+  title        text not null check (char_length(title) between 1 and 120),
+  summary      text,                      -- 목록 카드와 검색 결과에 나오는 한두 줄
+  body         text not null,             -- 간단한 마크다운 (src/components/note-body.tsx)
+  cover_url    text,                      -- 비우면 영상 썸네일 → 그라디언트 순으로 대신 나옴
+  video_url    text,                      -- 쇼츠 · 유튜브 주소. 본문 위에 플레이어로 들어감
+  game_id      uuid references public.games(id) on delete set null,
+  author_id    uuid references public.profiles(id) on delete set null,
+  is_published boolean not null default false,
+  published_at timestamptz,               -- 처음 공개한 시각 (다시 비공개로 돌려도 유지)
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+create index if not exists notes_published_idx on public.notes(published_at desc) where is_published;
+create index if not exists notes_game_idx      on public.notes(game_id);
+
 -- ---------------------------------------------------------------------
 -- 7. 카운터 유지 트리거
 -- ---------------------------------------------------------------------
@@ -400,6 +420,14 @@ drop policy if exists hackathons_read  on public.hackathons;
 drop policy if exists hackathons_write on public.hackathons;
 create policy hackathons_read  on public.hackathons for select using (is_published or public.is_staff());
 create policy hackathons_write on public.hackathons for all to authenticated
+  using (public.is_staff()) with check (public.is_staff());
+
+-- notes : 읽기는 공개된 글만, 쓰기는 운영자
+alter table public.notes enable row level security;
+drop policy if exists notes_read  on public.notes;
+drop policy if exists notes_write on public.notes;
+create policy notes_read  on public.notes for select using (is_published or public.is_staff());
+create policy notes_write on public.notes for all to authenticated
   using (public.is_staff()) with check (public.is_staff());
 
 -- runs : 읽기는 공개, 쓰기는 아무도 못 함.

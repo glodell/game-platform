@@ -1,21 +1,23 @@
 import Link from "next/link";
 import { Countdown } from "@/components/countdown";
 import { GameCard } from "@/components/game-card";
+import { NoteCard } from "@/components/note-card";
 import { TournamentCard } from "@/components/tournament-card";
 import { EmptyState, PhaseBadge, SectionHeader } from "@/components/ui";
-import { listGames, listHackathons, listTournaments } from "@/lib/queries";
+import { listGames, listHackathons, listNotes, listTournaments } from "@/lib/queries";
 import { formatDateTime } from "@/lib/format";
 import { FEATURES, SOCIAL } from "@/lib/site";
 import { phaseOf, type Prize } from "@/lib/types";
 
 export default async function HomePage() {
   // 꺼 둔 기능은 조회 자체를 하지 않습니다.
-  const [liveTournaments, upcoming, popular, community, hackathons] = await Promise.all([
+  const [liveTournaments, upcoming, popular, community, hackathons, notes] = await Promise.all([
     FEATURES.tournaments ? listTournaments("live") : [],
     FEATURES.tournaments ? listTournaments("upcoming") : [],
     listGames({ sort: "popular", limit: 8 }),
     FEATURES.community ? listGames({ kind: "community", sort: "recent", limit: 4 }) : [],
     FEATURES.hackathons ? listHackathons() : [],
+    listNotes(3),
   ]);
 
   const featuredTournaments = [...liveTournaments, ...upcoming].slice(0, 2);
@@ -62,6 +64,21 @@ export default async function HomePage() {
           </div>
         )}
       </section>
+
+      {notes.length > 0 && (
+        <section className="mt-16">
+          <SectionHeader
+            title="제작 노트"
+            description="게임을 AI와 어떻게 만들었는지 남긴 기록"
+            action={{ href: "/notes", label: "전체 노트" }}
+          />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {notes.map((note) => (
+              <NoteCard key={note.id} note={note} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {openHackathon && (
         <section className="mt-16">

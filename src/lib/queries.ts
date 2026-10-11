@@ -6,6 +6,7 @@ import type {
   Game,
   Hackathon,
   LeaderboardRow,
+  Note,
   Profile,
   Tournament,
   TournamentDetail,
@@ -188,6 +189,39 @@ export async function getHackathonBySlug(slug: string): Promise<Hackathon | null
     .eq("slug", fromPath(slug))
     .maybeSingle();
   return (data as Hackathon) ?? null;
+}
+
+const NOTE_FIELDS =
+  "id, slug, title, summary, cover_url, video_url, game_id, is_published, published_at, created_at, updated_at";
+
+/**
+ * 공개된 제작 노트 (최신순, 본문 제외).
+ *
+ * notes 테이블은 supabase/notes.sql 을 실행해야 생깁니다. 아직 안 돌린 DB 에서는
+ * 조회가 오류로 끝나는데, 그때도 사이트가 죽지 않고 빈 목록으로 보이게 합니다.
+ */
+export async function listNotes(limit = 30): Promise<Note[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("notes")
+    .select(NOTE_FIELDS)
+    .eq("is_published", true)
+    .order("published_at", { ascending: false })
+    .limit(limit);
+  return (data as unknown as Note[]) ?? [];
+}
+
+/** 노트 한 편. 비공개 노트는 RLS 가 운영자에게만 돌려줍니다. */
+export async function getNoteBySlug(slug: string): Promise<Note | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("notes")
+    .select(
+      `${NOTE_FIELDS}, body, game:games!notes_game_id_fkey(slug, title, tagline, thumbnail_url, kind, status)`,
+    )
+    .eq("slug", fromPath(slug))
+    .maybeSingle();
+  return (data as unknown as Note) ?? null;
 }
 
 export async function getProfileByHandle(handle: string): Promise<Profile | null> {
