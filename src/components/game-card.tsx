@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatCompact } from "@/lib/format";
+import { FEATURES } from "@/lib/site";
 import type { Game } from "@/lib/types";
 import { Badge } from "./ui";
 
@@ -20,13 +21,16 @@ export function GameCard({ game }: { game: Game }) {
         ) : (
           <PlaceholderArt seed={game.slug} />
         )}
-        <div className="absolute top-2.5 left-2.5">
-          {game.kind === "official" ? (
-            <Badge tone="neon">공식</Badge>
-          ) : (
-            <Badge tone="lime">구독자 제작</Badge>
-          )}
-        </div>
+        {/* 구독자 제작 게임이 없을 때는 전부 공식이라 구분 표시가 의미 없습니다. */}
+        {FEATURES.community && (
+          <div className="absolute top-2.5 left-2.5">
+            {game.kind === "official" ? (
+              <Badge tone="neon">공식</Badge>
+            ) : (
+              <Badge tone="lime">구독자 제작</Badge>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="p-4 flex flex-col flex-1">

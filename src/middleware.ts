@@ -1,7 +1,14 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { HIDDEN_PATHS } from "@/lib/site";
 
 export async function middleware(request: NextRequest) {
+  // 꺼 둔 기능의 주소로 들어오면 홈으로 보냅니다. 나중에 다시 열 기능이라 임시(307) 이동입니다.
+  const { pathname } = request.nextUrl;
+  if (HIDDEN_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
   let response = NextResponse.next({ request });
 
   // 아직 Supabase 를 연결하지 않았다면 세션 갱신을 건너뜁니다.

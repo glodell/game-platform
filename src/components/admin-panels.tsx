@@ -11,6 +11,7 @@ import {
   setGameThumbnail,
   type AdminResult,
 } from "@/app/actions/admin";
+import { FEATURES } from "@/lib/site";
 import { Badge } from "./ui";
 
 /* ------------------------------------------------------------------ */
@@ -226,32 +227,39 @@ function ThumbnailRow({ game }: { game: ThumbGame }) {
 /* 생성 폼 묶음                                                         */
 /* ------------------------------------------------------------------ */
 
+type TabKey = "game" | "tournament" | "hackathon";
+
+// 꺼 둔 기능은 개설 폼도 숨깁니다 — 만들어도 방문자에게 보이지 않습니다.
 const TABS = [
-  { key: "game", label: "게임 등록" },
-  { key: "tournament", label: "대회 개설" },
-  { key: "hackathon", label: "해커톤 개설" },
-] as const;
+  { key: "game", label: "게임 등록", on: true },
+  { key: "tournament", label: "대회 개설", on: FEATURES.tournaments },
+  { key: "hackathon", label: "해커톤 개설", on: FEATURES.hackathons },
+].filter((t) => t.on) as { key: TabKey; label: string }[];
 
 export function AdminForms({ games }: { games: { id: string; title: string }[] }) {
-  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("game");
+  const [tab, setTab] = useState<TabKey>("game");
 
   return (
     <section className="mt-14">
-      <div className="flex gap-1.5 mb-6">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key
-                ? "bg-ink-100 text-ink-950"
-                : "border border-ink-700 text-ink-400 hover:text-ink-100"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {TABS.length > 1 ? (
+        <div className="flex gap-1.5 mb-6">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                tab === t.key
+                  ? "bg-ink-100 text-ink-950"
+                  : "border border-ink-700 text-ink-400 hover:text-ink-100"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <h2 className="font-black text-lg mb-4">{TABS[0].label}</h2>
+      )}
 
       {tab === "game" && <GameForm />}
       {tab === "tournament" && <TournamentForm games={games} />}

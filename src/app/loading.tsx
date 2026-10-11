@@ -1,4 +1,5 @@
 import { GameGridSkeleton, CardListSkeleton, Skeleton } from "@/components/skeletons";
+import { FEATURES } from "@/lib/site";
 
 export default function HomeLoading() {
   return (
@@ -9,15 +10,16 @@ export default function HomeLoading() {
         <Skeleton className="h-4 w-full max-w-2xl" />
         <div className="flex gap-3 pt-2">
           <Skeleton className="h-12 w-36 rounded-xl" />
-          <Skeleton className="h-12 w-28 rounded-xl" />
-          <Skeleton className="h-12 w-36 rounded-xl" />
+          <Skeleton className="h-12 w-56 rounded-xl" />
         </div>
       </section>
 
-      <section className="mt-16 space-y-5">
-        <Skeleton className="h-7 w-48" />
-        <CardListSkeleton count={2} />
-      </section>
+      {FEATURES.tournaments && (
+        <section className="mt-16 space-y-5">
+          <Skeleton className="h-7 w-48" />
+          <CardListSkeleton count={2} />
+        </section>
+      )}
 
       <section className="mt-16 space-y-5">
         <Skeleton className="h-7 w-32" />

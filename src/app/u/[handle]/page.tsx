@@ -5,6 +5,7 @@ import { GameCard } from "@/components/game-card";
 import { Badge, RankMedal, SectionHeader } from "@/components/ui";
 import { formatDate, formatRelative, formatScore } from "@/lib/format";
 import { getProfileByHandle, listGamesByAuthor } from "@/lib/queries";
+import { FEATURES } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
 
 export async function generateMetadata({
@@ -40,10 +41,15 @@ export default async function ProfilePage({
   // 기록이 있는 게임 이름을 한 번에 가져옵니다.
   const gameIds = (bests ?? []).map((b) => b.game_id);
   const { data: recordGames } = gameIds.length
-    ? await supabase.from("games").select("id, title, slug, score_unit").in("id", gameIds)
-    : { data: [] as { id: string; title: string; slug: string; score_unit: string | null }[] };
+    ? await supabase.from("games").select("id, title, slug, score_unit, kind").in("id", gameIds)
+    : { data: [] as { id: string; title: string; slug: string; score_unit: string | null; kind: string }[] };
 
-  const gameById = new Map((recordGames ?? []).map((g) => [g.id, g]));
+  // 지금 공개하지 않는 구독자 제작 게임의 기록은 줄째 빠집니다 (아래에서 game 이 없으면 건너뜀).
+  const gameById = new Map(
+    (recordGames ?? [])
+      .filter((g) => FEATURES.community || g.kind === "official")
+      .map((g) => [g.id, g]),
+  );
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-12">

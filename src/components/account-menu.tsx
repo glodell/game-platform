@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { FEATURES } from "@/lib/site";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -76,7 +77,9 @@ export function AccountMenu({ profile, isStaff }: Props) {
             <p className="text-ink-400 text-xs truncate">@{profile.handle}</p>
           </div>
           <MenuLink href={`/u/${profile.handle}`} onClick={() => setOpen(false)}>내 프로필</MenuLink>
-          <MenuLink href="/submit" onClick={() => setOpen(false)}>게임 제출하기</MenuLink>
+          {FEATURES.community && (
+            <MenuLink href="/submit" onClick={() => setOpen(false)}>게임 제출하기</MenuLink>
+          )}
           {isStaff && (
             <MenuLink href="/admin" onClick={() => setOpen(false)}>
               <span className="text-lime-glow">운영자 콘솔</span>

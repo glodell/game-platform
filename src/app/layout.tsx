@@ -6,9 +6,9 @@ import { SocialLinks } from "@/components/social-links";
 import { isSupabaseConfigured } from "@/lib/env";
 import { siteUrl } from "@/lib/sandbox";
 
-const TITLE = "바이버후드 — AI로 만든 게임, 구독자와 대결";
+const TITLE = "바이버후드 — AI로 만든 3D 게임 체험관";
 const DESCRIPTION =
-  "바이브코딩으로 노는 이웃들. 쇼츠에서 AI로 만든 게임을 모아놓고, 제한 시간 대회에서 랭킹을 다투고, 해커톤에 직접 만든 게임을 올리는 플랫폼입니다.";
+  "바이브코딩으로 노는 이웃들. 쇼츠에서 소개한 AI 제작 3D 게임을 설치 없이 브라우저에서 바로 해볼 수 있는 체험관입니다.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),

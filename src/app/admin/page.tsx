@@ -5,6 +5,7 @@ import { RunReview, type ReviewRun } from "@/components/run-review";
 import { parseTrace } from "@/lib/run-trace";
 import { formatRelative } from "@/lib/format";
 import { getViewer } from "@/lib/queries";
+import { FEATURES } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
 import type { Game } from "@/lib/types";
 
@@ -36,7 +37,7 @@ export default async function AdminPage() {
   }
 
   const supabase = await createClient();
-  const [{ data: pending }, { data: games }, { data: runs }] = await Promise.all([
+  const [{ data: pendingRows }, { data: games }, { data: runs }] = await Promise.all([
     supabase
       .from("games")
       .select(
@@ -95,44 +96,54 @@ export default async function AdminPage() {
     };
   });
 
+  const pending = pendingRows ?? [];
+  const hasPending = pending.length > 0;
+
+  const tasks = [
+    "게임 등록",
+    ...(FEATURES.tournaments ? ["대회 개설"] : []),
+    ...(FEATURES.hackathons ? ["해커톤 개설"] : []),
+    ...(FEATURES.community ? ["제출작 심사"] : []),
+    "기록 검토",
+  ];
+
   return (
     <div className="mx-auto max-w-4xl px-5 py-12">
       <h1 className="text-3xl font-black tracking-tight">운영자 콘솔</h1>
-      <p className="text-ink-400 mt-2">
-        게임 등록, 대회 개설, 해커톤 개설, 제출작 심사를 여기서 합니다.
-      </p>
+      <p className="text-ink-400 mt-2">{tasks.join(", ")}를 여기서 합니다.</p>
 
-      <section className="mt-10">
-        <h2 className="font-black text-lg mb-4">
-          검토 대기{" "}
-          {pending && pending.length > 0 && (
-            <span className="text-gold tabular-nums">{pending.length}</span>
+      {/* 제출을 받지 않는 동안에도, 이미 들어와 있는 제출작은 처리할 수 있게 남겨둡니다. */}
+      {(FEATURES.community || hasPending) && (
+        <section className="mt-10">
+          <h2 className="font-black text-lg mb-4">
+            검토 대기{" "}
+            {hasPending && <span className="text-gold tabular-nums">{pending.length}</span>}
+          </h2>
+          {!hasPending ? (
+            <p className="panel px-5 py-8 text-center text-sm text-ink-400">
+              대기 중인 제출작이 없습니다.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {pending.map((game) => (
+                <ReviewRow
+                  key={game.id}
+                  game={{
+                    id: game.id,
+                    slug: game.slug,
+                    title: game.title,
+                    tagline: game.tagline,
+                    authorHandle:
+                      (game as unknown as Game).author?.handle ?? "알 수 없음",
+                    createdAt: formatRelative(game.created_at),
+                    isHackathonEntry: Boolean(game.hackathon_id),
+                  }}
+                />
+              ))}
+            </ul>
           )}
-        </h2>
-        {!pending || pending.length === 0 ? (
-          <p className="panel px-5 py-8 text-center text-sm text-ink-400">
-            대기 중인 제출작이 없습니다.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {pending.map((game) => (
-              <ReviewRow
-                key={game.id}
-                game={{
-                  id: game.id,
-                  slug: game.slug,
-                  title: game.title,
-                  tagline: game.tagline,
-                  authorHandle:
-                    (game as unknown as Game).author?.handle ?? "알 수 없음",
-                  createdAt: formatRelative(game.created_at),
-                  isHackathonEntry: Boolean(game.hackathon_id),
-                }}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+        </section>
+      )}
 
       <AdminForms games={(games ?? []).filter((g) => g.status === "published")} />
 

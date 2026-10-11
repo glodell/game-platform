@@ -5,15 +5,17 @@ import { TournamentCard } from "@/components/tournament-card";
 import { EmptyState, PhaseBadge, SectionHeader } from "@/components/ui";
 import { listGames, listHackathons, listTournaments } from "@/lib/queries";
 import { formatDateTime } from "@/lib/format";
+import { FEATURES, SOCIAL } from "@/lib/site";
 import { phaseOf, type Prize } from "@/lib/types";
 
 export default async function HomePage() {
+  // 꺼 둔 기능은 조회 자체를 하지 않습니다.
   const [liveTournaments, upcoming, popular, community, hackathons] = await Promise.all([
-    listTournaments("live"),
-    listTournaments("upcoming"),
+    FEATURES.tournaments ? listTournaments("live") : [],
+    FEATURES.tournaments ? listTournaments("upcoming") : [],
     listGames({ sort: "popular", limit: 8 }),
-    listGames({ kind: "community", sort: "recent", limit: 4 }),
-    listHackathons(),
+    FEATURES.community ? listGames({ kind: "community", sort: "recent", limit: 4 }) : [],
+    FEATURES.hackathons ? listHackathons() : [],
   ]);
 
   const featuredTournaments = [...liveTournaments, ...upcoming].slice(0, 2);
@@ -107,7 +109,12 @@ export default async function HomePage() {
   );
 }
 
+const secondaryButton =
+  "rounded-xl border border-ink-700 px-6 py-3 font-bold text-ink-200 transition-colors";
+
 function Hero({ hasLive }: { hasLive: boolean }) {
+  const youtube = SOCIAL.find((item) => item.key === "youtube");
+
   return (
     <section className="pt-16 sm:pt-24 pb-4">
       <div>
@@ -119,14 +126,14 @@ function Hero({ hasLive }: { hasLive: boolean }) {
         )}
         {/* 좁은 화면에서는 두 줄, lg 부터는 한 줄로 이어 붙입니다. */}
         <h1 className="text-4xl sm:text-6xl lg:text-[3.5rem] xl:text-6xl font-black tracking-tighter leading-[1.05]">
-          <span className="block lg:inline">AI로 만든 게임,</span>{" "}
+          <span className="block lg:inline">AI로 만든 3D 게임,</span>{" "}
           <span className="block lg:inline bg-gradient-to-r from-neon-400 to-punch-400 bg-clip-text text-transparent">
-            구독자와 정면 대결.
+            여기서 바로 체험.
           </span>
         </h1>
         <p className="text-ink-300 mt-6 text-lg leading-relaxed max-w-3xl">
-          쇼츠에서 만든 게임이 여기 다 모여 있습니다. 제한 시간 안에 최고 기록을 남기고,
-          해커톤에 직접 만든 게임을 올리고, 서로의 작품에 좋아요와 피드백을 남기세요.
+          쇼츠에서 소개한 게임을 직접 해볼 수 있는 체험관입니다. 설치도 가입도 필요 없이,
+          마음에 드는 게임을 골라 바로 플레이하세요.
         </p>
         <div className="flex flex-wrap gap-3 mt-8">
           <Link
@@ -135,18 +142,32 @@ function Hero({ hasLive }: { hasLive: boolean }) {
           >
             게임하러 가기
           </Link>
-          <Link
-            href="/tournaments"
-            className="rounded-xl border border-ink-700 px-6 py-3 font-bold text-ink-200 hover:border-neon-400/60 hover:text-neon-400 transition-colors"
-          >
-            대회 보기
-          </Link>
-          <Link
-            href="/submit"
-            className="rounded-xl border border-ink-700 px-6 py-3 font-bold text-ink-200 hover:border-lime-glow/60 hover:text-lime-glow transition-colors"
-          >
-            내 게임 올리기
-          </Link>
+          {FEATURES.tournaments && (
+            <Link
+              href="/tournaments"
+              className={`${secondaryButton} hover:border-neon-400/60 hover:text-neon-400`}
+            >
+              대회 보기
+            </Link>
+          )}
+          {FEATURES.community && (
+            <Link
+              href="/submit"
+              className={`${secondaryButton} hover:border-lime-glow/60 hover:text-lime-glow`}
+            >
+              내 게임 올리기
+            </Link>
+          )}
+          {youtube && (
+            <a
+              href={youtube.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${secondaryButton} hover:border-[#ff4b4b]/50 hover:text-[#ff4b4b]`}
+            >
+              유튜브에서 제작 과정 보기
+            </a>
+          )}
         </div>
       </div>
     </section>

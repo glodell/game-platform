@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { FEATURES } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Comment,
@@ -12,6 +13,21 @@ import type {
 
 const GAME_FIELDS =
   "id, slug, title, tagline, description, thumbnail_url, kind, status, source, entry_url, html, author_id, hackathon_id, scoring, score_unit, tags, play_count, like_count, comment_count, published_at, created_at, author:profiles!games_author_id_fkey(handle, display_name, avatar_url)";
+
+/**
+ * 주소에서 온 슬러그·핸들을 DB 값과 맞춥니다.
+ *
+ * App Router 는 동적 경로 값을 퍼센트 인코딩된 그대로 넘겨줍니다. 핸들은 구글 이름에서,
+ * 슬러그는 게임 제목에서 만들어져 한글이 들어갈 수 있는데, 풀어주지 않으면 조회가 빗나가
+ * 멀쩡히 있는 프로필·게임이 "찾을 수 없음" 으로 나옵니다.
+ */
+function fromPath(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value; // 깨진 인코딩 — 어차피 일치하는 행이 없습니다.
+  }
+}
 
 /**
  * 로그인한 사용자의 프로필 (없으면 null)
@@ -39,7 +55,9 @@ export async function listGames(options: {
   const supabase = await createClient();
   let query = supabase.from("games").select(GAME_FIELDS).eq("status", "published");
 
-  if (options.kind) query = query.eq("kind", options.kind);
+  // 구독자 참여를 꺼 둔 동안에는 이미 공개된 구독자 제작 게임도 목록에 내지 않습니다.
+  const kind = FEATURES.community ? options.kind : "official";
+  if (kind) query = query.eq("kind", kind);
   if (options.hackathonId) query = query.eq("hackathon_id", options.hackathonId);
 
   const sort = options.sort ?? "recent";
@@ -53,7 +71,11 @@ export async function listGames(options: {
 
 export async function getGameBySlug(slug: string): Promise<Game | null> {
   const supabase = await createClient();
-  const { data } = await supabase.from("games").select(GAME_FIELDS).eq("slug", slug).maybeSingle();
+  const { data } = await supabase
+    .from("games")
+    .select(GAME_FIELDS)
+    .eq("slug", fromPath(slug))
+    .maybeSingle();
   return (data as unknown as Game) ?? null;
 }
 
@@ -133,7 +155,7 @@ export async function getTournamentBySlug(slug: string): Promise<TournamentDetai
   const { data } = await supabase
     .from("tournaments")
     .select(TOURNAMENT_DETAIL_FIELDS)
-    .eq("slug", slug)
+    .eq("slug", fromPath(slug))
     .maybeSingle();
   return (data as unknown as TournamentDetail) ?? null;
 }
@@ -160,25 +182,35 @@ export async function listHackathons(): Promise<Hackathon[]> {
 
 export async function getHackathonBySlug(slug: string): Promise<Hackathon | null> {
   const supabase = await createClient();
-  const { data } = await supabase.from("hackathons").select("*").eq("slug", slug).maybeSingle();
+  const { data } = await supabase
+    .from("hackathons")
+    .select("*")
+    .eq("slug", fromPath(slug))
+    .maybeSingle();
   return (data as Hackathon) ?? null;
 }
 
 export async function getProfileByHandle(handle: string): Promise<Profile | null> {
   const supabase = await createClient();
-  const { data } = await supabase.from("profiles").select("*").eq("handle", handle).maybeSingle();
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("handle", fromPath(handle))
+    .maybeSingle();
   return (data as Profile) ?? null;
 }
 
 /** 특정 유저가 만든 공개 게임 */
 export async function listGamesByAuthor(authorId: string): Promise<Game[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  let query = supabase
     .from("games")
     .select(GAME_FIELDS)
     .eq("author_id", authorId)
-    .eq("status", "published")
-    .order("created_at", { ascending: false });
+    .eq("status", "published");
+  if (!FEATURES.community) query = query.eq("kind", "official");
+
+  const { data } = await query.order("created_at", { ascending: false });
   return (data as unknown as Game[]) ?? [];
 }
 

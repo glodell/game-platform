@@ -32,7 +32,19 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      /**
+       * 게임 iframe 은 allow-same-origin 없는 샌드박스라 오리진이 'null' 입니다. 그래서 게임이
+       * 자기 폴더의 파일을 불러오는 것조차 교차 출처 요청이 되어, 이 헤더가 없으면 모듈 스크립트
+       * · fetch(모델, 소리) · WebGL 텍스처가 전부 CORS 로 막힙니다 — 파일이 여러 개인 3D 게임이
+       * 통째로 안 뜹니다. /g 아래는 누구나 받아갈 수 있는 정적 게임 파일뿐이라 열어도 무방합니다.
+       */
+      {
+        source: "/g/:path*",
+        headers: [{ key: "Access-Control-Allow-Origin", value: "*" }],
+      },
+    ];
   },
   /**
    * 전체화면 플레이 전용 페이지(/play/…)를 없앴습니다 — 게임 화면 우상단의 전체화면

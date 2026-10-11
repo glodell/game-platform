@@ -11,6 +11,12 @@
 - **좋아요 · 댓글** — 서로의 게임을 해보고 피드백
 - **랭킹** — 게임별 전체 랭킹 + 대회별 실시간 랭킹 (1인 최고 기록 1건 반영)
 
+> **지금은 체험관 모드입니다.** 쇼츠에서 소개한 게임을 링크 타고 들어와 바로 해보는 용도로만
+> 열어 두었습니다. 대회 · 해커톤 · 구독자 제출(만들기 가이드 포함)은 코드는 그대로 두고 꺼 둔
+> 상태이고, [`src/lib/site.ts`](src/lib/site.ts) 의 `FEATURES` 에서 `true` 로 바꾸면 메뉴 · 홈
+> 섹션 · 페이지가 함께 돌아옵니다. 끄기 직전의 전체 버전은 `backup-full-platform-2026-10-11`
+> 태그로 남겨 두었습니다.
+
 스택: Next.js 15 (App Router) · Supabase (Postgres / Auth / RLS) · Tailwind CSS v4
 
 ---
@@ -104,6 +110,9 @@ update profiles set role = 'owner' where handle = '내핸들';
 1. `public/g/<이름>/index.html` 에 파일을 넣고, 운영자 콘솔에서 경로 `/g/<이름>/index.html` 입력
 2. 운영자 콘솔의 **HTML 코드 직접 붙여넣기** 칸에 통째로 붙여넣기
 
+모델 · 텍스처 · 모듈 스크립트처럼 **파일이 여러 개인 3D 게임은 1번**으로 폴더째 넣으세요.
+2번은 외부 요청이 전부 막혀 있어 CDN 의 three.js 같은 라이브러리도 불러오지 못합니다.
+
 ### 구독자 제출
 
 구독자는 `/submit` 에서 코드를 붙여넣고 미리보기로 확인한 뒤 제출합니다. 상태는 `pending` 으로
@@ -181,7 +190,7 @@ src/
     api/runs/                점수 토큰 발급 · 제출 검증
     actions/                 서버 액션 (좋아요·댓글·제출·운영)
   components/                UI
-  lib/                       Supabase 클라이언트, 쿼리, 샌드박스, 토큰
+  lib/                       Supabase 클라이언트, 쿼리, 샌드박스, 토큰, 기능 스위치(site.ts)
 public/
   sdk/arcade.js              게임이 불러가는 SDK
   g/                         기본 게임 (reflex, dodge)

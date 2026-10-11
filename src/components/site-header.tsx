@@ -8,6 +8,8 @@ import { NavProgress } from "./nav-progress";
 export async function SiteHeader() {
   // getViewer 는 cache() 로 감싸져 있어 페이지 쪽에서 또 불러도 조회는 1회입니다.
   const profile = await getViewer();
+  // 메뉴가 한두 개뿐이면 햄버거로 접을 이유가 없으니 좁은 화면에서도 그대로 보여줍니다.
+  const inline = NAV.length <= 2;
 
   return (
     <header className="sticky top-0 z-50 border-b border-ink-800 bg-ink-950/80 backdrop-blur-md">
@@ -32,7 +34,7 @@ export async function SiteHeader() {
         </Link>
 
         {/* 데스크톱: 메뉴를 그대로 펼치고, 모바일에서는 오른쪽 햄버거로 접습니다. */}
-        <nav className="hidden md:flex items-center gap-1 text-sm">
+        <nav className={`${inline ? "flex" : "hidden md:flex"} items-center gap-1 text-sm`}>
           {NAV.map((item) => (
             <Link
               key={item.href}
@@ -49,7 +51,7 @@ export async function SiteHeader() {
             profile={profile}
             isStaff={profile?.role === "owner" || profile?.role === "moderator"}
           />
-          <MobileNav />
+          {!inline && <MobileNav />}
         </div>
       </div>
     </header>

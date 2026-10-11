@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { FEATURES } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
 import { TOO_MANY, rateLimit } from "@/lib/rate-limit";
 
@@ -22,6 +23,9 @@ function slugify(title: string) {
 }
 
 export async function submitGame(formData: FormData): Promise<SubmitResult> {
+  // 제출 페이지를 숨겨도 서버 액션은 직접 호출할 수 있으므로 여기서도 막습니다.
+  if (!FEATURES.community) return { ok: false, error: "지금은 게임 제출을 받지 않습니다." };
+
   const supabase = await createClient();
   const {
     data: { user },
