@@ -1,16 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { blobObjectUrl, blobUrlOf, removeBlobBuild } from "@/lib/game-blob";
 import {
-  MAX_FILE_BYTES,
   isBuildId,
   isGameKey,
   isSafeFilePath,
   parseUploadedEntry,
   uploadedEntryUrl,
+  uploadLimits,
+  type GameStore,
 } from "@/lib/game-files";
 import {
   ensureGameBucket,
+  gameStore,
   removeGameBuild,
   signGameUploads,
   storageObjectUrl,
@@ -19,18 +22,22 @@ import {
 import { requireStaff } from "@/lib/staff";
 import { createAdminClient } from "@/lib/supabase/server";
 
-/** 한 번에 끊어 주는 업로드 주소 수 — 브라우저가 파일 목록을 이 크기로 나눠 부릅니다. */
+/** 한 번에 받는 파일 목록 크기 — 브라우저가 이 크기로 나눠 부릅니다. */
 const BATCH = 60;
 
 export type StartUploadResult =
-  | { ok: true; build: string; tickets: UploadTicket[] }
+  | { ok: true; store: GameStore; build: string; tickets: UploadTicket[] }
   | { ok: false; error: string };
 
 /**
- * 게임 폴더 업로드 준비 — 파일마다 1회용 업로드 주소를 끊어 줍니다.
+ * 게임 폴더 업로드 준비.
  *
  * 파일 자체는 브라우저가 저장소로 바로 올립니다. 서버를 거치면 요청 크기 제한(4.5MB)에
- * 걸려 모델 · 텍스처 같은 큰 파일을 받을 수 없습니다.
+ * 걸려 모델 · 텍스처 같은 큰 파일을 받을 수 없습니다. 여기서는 빌드 번호를 정하고,
+ * 저장소가 무엇인지 알려줍니다.
+ *
+ *   Supabase — 파일마다 1회용 업로드 주소(tickets)를 끊어 줍니다.
+ *   Blob     — tickets 는 비어 있습니다. 브라우저가 파일마다 /api/game-upload 에서 허가를 받습니다.
  *
  * 첫 호출에서 빌드 번호를 만들어 돌려주고, 파일이 많아 나눠 부를 때는 그 번호를 다시 넘깁니다.
  */
@@ -42,6 +49,7 @@ export async function startGameUpload(input: {
   const { staff } = await requireStaff();
   if (!staff) return { ok: false, error: "권한이 없습니다." };
 
+  const store = gameStore();
   const { key, files } = input;
   if (!isGameKey(key)) return { ok: false, error: "게임 폴더 이름이 올바르지 않습니다." };
   if (input.build !== undefined && !isBuildId(input.build)) {
@@ -54,17 +62,19 @@ export async function startGameUpload(input: {
     if (typeof file?.path !== "string" || !isSafeFilePath(file.path)) {
       return { ok: false, error: `올릴 수 없는 파일 이름입니다: ${String(file?.path)}` };
     }
-    if (!Number.isFinite(file.size) || file.size < 0 || file.size > MAX_FILE_BYTES) {
+    if (!Number.isFinite(file.size) || file.size < 0 || file.size > uploadLimits(store).maxFileBytes) {
       return { ok: false, error: `파일이 너무 큽니다: ${file.path}` };
     }
   }
 
+  const build =
+    input.build ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+  if (store === "blob") return { ok: true, store, build, tickets: [] };
+
   const admin = createAdminClient();
   const bucketError = await ensureGameBucket(admin);
   if (bucketError) return { ok: false, error: bucketError };
-
-  const build =
-    input.build ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
   const signed = await signGameUploads(
     admin,
@@ -73,7 +83,7 @@ export async function startGameUpload(input: {
   );
   if ("error" in signed) return { ok: false, error: signed.error };
 
-  return { ok: true, build, tickets: signed.tickets };
+  return { ok: true, store, build, tickets: signed.tickets };
 }
 
 export type FinishUploadResult =
@@ -100,15 +110,29 @@ export async function finishGameUpload(input: {
   }
 
   // 시작 파일이 실제로 올라갔는지 확인합니다 — 없으면 게임 경로를 바꿔도 빈 화면만 뜹니다.
-  const probe = await fetch(storageObjectUrl(`${key}/${build}/index.html`), {
-    method: "HEAD",
-    cache: "no-store",
-  });
-  if (!probe.ok) {
-    return { ok: false, error: "index.html 이 올라가지 않았습니다. 다시 올려주세요." };
+  const store = gameStore();
+  const entryFile = `${key}/${build}/index.html`;
+  const missing = { ok: false as const, error: "index.html 이 올라가지 않았습니다. 다시 올려주세요." };
+
+  if (store === "blob") {
+    const actual = await blobUrlOf(entryFile);
+    if (!actual) return missing;
+    // 서빙 라우트는 주소를 직접 조립합니다. Blob 이 알려준 주소와 다르면 올린 게임이 열리지
+    // 않으므로, 게임을 연결하기 전에 여기서 멈추고 실제 주소를 보여줍니다.
+    const expected = blobObjectUrl(entryFile);
+    // 주소 문자열을 URL 로 한 번 정리해서 비교합니다 (호스트의 대소문자 차이 등은 같은 주소입니다).
+    if (!expected || new URL(actual).href !== new URL(expected).href) {
+      return {
+        ok: false,
+        error: `Blob 주소가 예상과 다릅니다. 이 메시지를 그대로 알려주세요 — 실제: ${actual}`,
+      };
+    }
+  } else {
+    const probe = await fetch(storageObjectUrl(entryFile), { method: "HEAD", cache: "no-store" });
+    if (!probe.ok) return missing;
   }
 
-  const entryUrl = uploadedEntryUrl(key, build);
+  const entryUrl = uploadedEntryUrl(store, key, build);
   if (!gameId) return { ok: true, entryUrl, replacedTitle: null };
 
   const switched = await pointGameAt(supabase, gameId, entryUrl);
@@ -158,12 +182,13 @@ async function pointGameAt(
     .eq("id", gameId);
   if (error) return { ok: false, error: `게임 경로를 바꾸지 못했습니다: ${error.message}` };
 
-  // 전에 쓰던 빌드는 이제 아무도 가리키지 않으니 지웁니다 (저장 공간이 한정돼 있습니다).
-  // 실패해도 게임은 이미 새 위치로 돌고 있으므로 조용히 넘어갑니다.
+  // 전에 쓰던 빌드는 이제 아무도 가리키지 않으니, 그 빌드가 있던 저장소에서 지웁니다
+  // (저장 공간이 한정돼 있습니다). 실패해도 게임은 이미 새 위치로 돌고 있으므로 조용히 넘어갑니다.
   const previous = parseUploadedEntry(game.entry_url);
   if (previous && game.entry_url !== entryUrl) {
     try {
-      await removeGameBuild(createAdminClient(), previous.key, previous.build);
+      if (previous.store === "blob") await removeBlobBuild(previous.key, previous.build);
+      else await removeGameBuild(createAdminClient(), previous.key, previous.build);
     } catch (cause) {
       console.warn("이전 빌드 삭제 실패:", cause);
     }

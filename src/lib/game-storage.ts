@@ -1,8 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GAME_BUCKET } from "./game-files";
+import { GAME_BUCKET, type GameStore } from "./game-files";
 
 /**
- * 올린 게임 파일을 다루는 저장소 작업. 전부 service_role 클라이언트로 부릅니다.
+ * 지금 웹 업로드가 가는 저장소.
+ *
+ * Vercel Blob 이 연결돼 있으면(BLOB_READ_WRITE_TOKEN) Blob, 아니면 Supabase Storage 입니다.
+ * Blob 쪽은 사이트와 같은 Vercel 의 전송량을 쓰기 때문에 방문자가 많을 때 유리합니다.
+ * 이미 올린 게임은 주소에 저장소가 남아 있어, 이 값이 바뀌어도 원래 자리에서 열립니다.
+ */
+export function gameStore(): GameStore {
+  return process.env.BLOB_READ_WRITE_TOKEN ? "blob" : "supabase";
+}
+
+/**
+ * 아래는 Supabase Storage 쪽 작업입니다 (Blob 쪽은 game-blob.ts). 전부 service_role 클라이언트로 부릅니다.
  *
  * 브라우저가 저장소에 직접 쓰게 정책을 여는 대신, 운영자인지 확인한 서버 액션이 파일마다
  * 1회용 업로드 주소를 끊어 줍니다. 그래서 저장소 쪽에는 따로 정책을 만들 필요가 없고,

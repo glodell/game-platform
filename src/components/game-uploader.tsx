@@ -1,5 +1,6 @@
 "use client";
 
+import { upload as uploadToBlob } from "@vercel/blob/client";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { finishGameUpload, startGameUpload } from "@/app/actions/game-upload";
@@ -9,8 +10,10 @@ import {
   formatBytes,
   gameKeyFrom,
   isJunkPath,
+  uploadLimits,
   type FolderAnalysis,
   type GameFile,
+  type GameStore,
   type PickedFile,
 } from "@/lib/game-files";
 import { createClient } from "@/lib/supabase/client";
@@ -25,9 +28,15 @@ type Phase =
   | { kind: "done"; message: string }
   | { kind: "error"; message: string; folder?: Ready };
 
-const TICKET_BATCH = 60; // 서버 액션이 한 번에 끊어 주는 업로드 주소 수
+const TICKET_BATCH = 60; // 서버 액션이 한 번에 받는 파일 목록 크기
 const PARALLEL = 4; // 동시에 올리는 파일 수
 const RETRIES = 2;
+const MULTIPART_BYTES = 20 * 1024 * 1024; // Blob: 이보다 큰 파일은 조각내어 올립니다
+
+const STORE_LABEL: Record<GameStore, string> = {
+  blob: "Vercel Blob",
+  supabase: "Supabase 저장소",
+};
 
 /**
  * 게임 폴더 올리기.
@@ -38,10 +47,13 @@ const RETRIES = 2;
  */
 export function GameUploader({
   games,
+  store,
   onUploaded,
 }: {
   /** 파일을 교체할 수 있는 기존 게임 */
   games: { id: string; title: string }[];
+  /** 지금 업로드가 가는 저장소 — 받을 수 있는 파일 크기가 저장소마다 다릅니다. */
+  store: GameStore;
   /** 새 게임으로 올렸을 때 — 등록 폼의 게임 경로 칸을 채웁니다. */
   onUploaded: (entryUrl: string) => void;
 }) {
@@ -56,7 +68,7 @@ export function GameUploader({
   async function check(picked: PickedFile[]) {
     setPhase({ kind: "checking" });
     try {
-      const result = await analyzeGameFolder(picked);
+      const result = await analyzeGameFolder(picked, uploadLimits(store));
       setPhase(result.ok ? { kind: "ready", folder: result } : { kind: "error", message: result.error });
     } catch {
       setPhase({ kind: "error", message: "폴더를 읽지 못했습니다. 다시 골라주세요." });
@@ -114,9 +126,13 @@ export function GameUploader({
         const tokens = new Map(started.tickets.map((ticket) => [ticket.path, ticket.token]));
         const queue = [...batch];
 
+        // 어느 저장소로 올릴지는 서버가 정합니다 (화면을 연 뒤에 설정이 바뀌었을 수도 있습니다).
+        const toBlob = started.store === "blob";
+
         async function worker() {
           for (let next = queue.shift(); next; next = queue.shift()) {
-            await putFile(storage, prefix, next, tokens.get(next.path));
+            if (toBlob) await putBlob(prefix, next);
+            else await putFile(storage, prefix, next, tokens.get(next.path));
             doneBytes += next.file.size;
             doneFiles += 1;
             setPhase({ kind: "uploading", folder, doneBytes: Math.min(doneBytes, total), doneFiles });
@@ -188,8 +204,10 @@ export function GameUploader({
         />
         <p className="text-xs text-ink-600 mt-3 leading-relaxed">
           index.html 이 들어 있는 폴더를 통째로 고르면 됩니다. Vite 처럼 빌드가 필요한 프로젝트는
-          빌드한 뒤 생기는 dist 폴더를 고르세요. 파일 하나는 50MB 까지 올릴 수 있습니다.
+          빌드한 뒤 생기는 dist 폴더를 고르세요. 파일 하나는{" "}
+          {formatBytes(uploadLimits(store).maxFileBytes)} 까지 올릴 수 있습니다.
         </p>
+        <p className="text-xs text-ink-600 mt-1">저장 위치: {STORE_LABEL[store]}</p>
       </div>
 
       {phase.kind === "checking" && <p className="text-sm text-ink-400">폴더를 확인하는 중…</p>}
@@ -276,7 +294,26 @@ function percent(done: number, total: number) {
 
 type Bucket = ReturnType<ReturnType<typeof createClient>["storage"]["from"]>;
 
-/** 파일 하나를 1회용 주소로 올립니다. 네트워크가 잠깐 끊겨도 몇 번 다시 시도합니다. */
+/** Vercel Blob 으로 파일 하나를 올립니다. 허가는 /api/game-upload 가 파일마다 내줍니다. */
+async function putBlob(prefix: string, file: GameFile) {
+  let lastError = "";
+  for (let attempt = 0; attempt <= RETRIES; attempt++) {
+    try {
+      await uploadToBlob(`${prefix}/${file.path}`, file.file, {
+        access: "public",
+        handleUploadUrl: "/api/game-upload",
+        contentType: file.type,
+        multipart: file.file.size > MULTIPART_BYTES,
+      });
+      return;
+    } catch (cause) {
+      lastError = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+  throw new Error(`올리지 못했습니다 (${file.path}): ${lastError}`);
+}
+
+/** Supabase 저장소로 파일 하나를 1회용 주소로 올립니다. 네트워크가 잠깐 끊겨도 몇 번 다시 시도합니다. */
 async function putFile(storage: Bucket, prefix: string, file: GameFile, token: string | undefined) {
   if (!token) throw new Error(`업로드 주소를 받지 못했습니다: ${file.path}`);
 

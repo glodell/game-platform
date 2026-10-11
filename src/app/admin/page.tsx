@@ -10,6 +10,7 @@ import {
 import { RunReview, type ReviewRun } from "@/components/run-review";
 import { parseTrace } from "@/lib/run-trace";
 import { formatDate, formatRelative } from "@/lib/format";
+import { gameStore } from "@/lib/game-storage";
 import { getViewer } from "@/lib/queries";
 import { FEATURES } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
@@ -186,7 +187,12 @@ export default async function AdminPage() {
         </section>
       )}
 
-      <AdminForms games={publishedGames} allGames={games ?? []} newFolders={newFolders} />
+      <AdminForms
+        games={publishedGames}
+        allGames={games ?? []}
+        newFolders={newFolders}
+        store={gameStore()}
+      />
 
       <NotesManager notes={notes} games={publishedGames} ready={!notesError} />
 

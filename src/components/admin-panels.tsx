@@ -14,6 +14,7 @@ import {
   type AdminResult,
 } from "@/app/actions/admin";
 import { linkGameFolder } from "@/app/actions/game-upload";
+import type { GameStore } from "@/lib/game-files";
 import { FEATURES } from "@/lib/site";
 import { GameUploader } from "./game-uploader";
 import { Badge } from "./ui";
@@ -244,11 +245,14 @@ export function AdminForms({
   games,
   allGames = games,
   newFolders = [],
+  store = "supabase",
 }: {
   /** 공개된 게임 (대회를 열 수 있는 대상) */
   games: { id: string; title: string }[];
   /** 아직 공개 전인 것까지 포함한 게임 (파일을 교체할 수 있는 대상) */
   allGames?: { id: string; title: string }[];
+  /** 웹 업로드가 가는 저장소 */
+  store?: GameStore;
   /** public/g 에 들어 있지만 아직 게임으로 등록하지 않은 폴더 이름 */
   newFolders?: string[];
 }) {
@@ -276,7 +280,7 @@ export function AdminForms({
         <h2 className="font-black text-lg mb-4">{TABS[0].label}</h2>
       )}
 
-      {tab === "game" && <GameForm games={allGames} newFolders={newFolders} />}
+      {tab === "game" && <GameForm games={allGames} newFolders={newFolders} store={store} />}
       {tab === "tournament" && <TournamentForm games={games} />}
       {tab === "hackathon" && <HackathonForm />}
     </section>
@@ -308,9 +312,11 @@ function useAction(action: (fd: FormData) => Promise<AdminResult>) {
 function GameForm({
   games,
   newFolders,
+  store,
 }: {
   games: { id: string; title: string }[];
   newFolders: string[];
+  store: GameStore;
 }) {
   const { state, pending, onSubmit } = useAction(createOfficialGame);
   // 폴더를 올리면 이 칸이 자동으로 채워집니다. 직접 적어도 됩니다.
@@ -328,7 +334,7 @@ function GameForm({
         단일 HTML 은 아래에 코드를 그대로 붙여넣어도 됩니다.
       </p>
 
-      <GameUploader games={games} onUploaded={setEntryUrl} />
+      <GameUploader games={games} store={store} onUploaded={setEntryUrl} />
 
       {newFolders.length > 0 && (
         <div className="rounded-xl border border-lime-glow/40 bg-lime-glow/10 px-4 py-3 text-sm text-lime-glow">

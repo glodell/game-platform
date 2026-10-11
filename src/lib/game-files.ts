@@ -4,20 +4,31 @@
  * 브라우저(폴더 검사 · 업로드), 서버 액션(검증), 서빙 라우트(/g/u/…)가 함께 씁니다.
  * 세 곳에서 다 불러올 수 있도록 다른 모듈에 기대지 않습니다.
  *
- * 올린 게임은 저장소(Supabase Storage)의 games 버킷에 <키>/<빌드>/<파일> 로 들어가고,
- * 사이트에서는 /g/u/<키>/<빌드>/<파일> 로 열립니다. 주소에 빌드 번호가 들어 있어서
+ * 올린 게임은 파일 저장소에 <키>/<빌드>/<파일> 로 들어가고, 사이트에서는
+ * /g/<저장소 표시>/<키>/<빌드>/<파일> 로 열립니다. 주소에 빌드 번호가 들어 있어서
  * 새 버전을 올려도 옛 주소의 내용은 바뀌지 않습니다 — 캐시를 오래 걸 수 있고,
  * 다 올라간 뒤에 게임의 경로만 바꾸므로 올리는 도중의 반쪽짜리 상태가 방문자에게 보이지 않습니다.
+ *
+ * 저장소는 두 가지입니다. 어디에 올렸는지가 주소에 남으므로, 저장소를 바꾼 뒤에도 전에
+ * 올린 게임은 원래 자리에서 그대로 열립니다.
+ *   blob     — Vercel Blob. 사이트와 같은 Vercel 의 전송량을 씁니다 (/g/b/…)
+ *   supabase — Supabase Storage 의 games 버킷. Blob 을 연결하기 전의 기본값 (/g/u/…)
  */
 
+export type GameStore = "blob" | "supabase";
+
 export const GAME_BUCKET = "games";
-export const UPLOAD_PREFIX = "/g/u/";
+const UPLOAD_PREFIXES: Record<GameStore, string> = { blob: "/g/b/", supabase: "/g/u/" };
 
 const MB = 1024 * 1024;
-/** 파일 하나의 한도 — Supabase 무료 요금제가 받는 최대 크기입니다. */
-export const MAX_FILE_BYTES = 50 * MB;
-export const MAX_TOTAL_BYTES = 400 * MB;
 export const MAX_FILES = 2000;
+
+/** 저장소마다 받을 수 있는 크기가 다릅니다. Supabase 무료 요금제는 파일 하나가 50MB 까지입니다. */
+export function uploadLimits(store: GameStore) {
+  return store === "blob"
+    ? { maxFileBytes: 200 * MB, maxTotalBytes: 600 * MB }
+    : { maxFileBytes: 50 * MB, maxTotalBytes: 400 * MB };
+}
 /** 이보다 큰 파일은 방문자가 받는 데 오래 걸린다고 알려줍니다. */
 const HEAVY_BYTES = 20 * MB;
 
@@ -51,15 +62,33 @@ export function gameKeyFrom(name: string) {
   return KEY.test(key) && !BUILD_DIRS.includes(key) ? key : "game";
 }
 
-export function uploadedEntryUrl(key: string, build: string) {
-  return `${UPLOAD_PREFIX}${key}/${build}/index.html`;
+export function uploadedEntryUrl(store: GameStore, key: string, build: string) {
+  return `${UPLOAD_PREFIXES[store]}${key}/${build}/index.html`;
 }
 
-/** 게임 경로가 올린 게임(/g/u/<키>/<빌드>/index.html)이면 키와 빌드를 돌려줍니다. */
-export function parseUploadedEntry(entryUrl: string | null | undefined) {
-  const match = entryUrl?.match(/^\/g\/u\/([^/]+)\/([^/]+)\/index\.html$/);
-  return match && KEY.test(match[1]) && BUILD.test(match[2])
-    ? { key: match[1], build: match[2] }
+/** 게임 경로가 올린 게임(/g/b/… 또는 /g/u/…)이면 어느 저장소의 어떤 빌드인지 돌려줍니다. */
+export function parseUploadedEntry(
+  entryUrl: string | null | undefined,
+): { store: GameStore; key: string; build: string } | null {
+  const match = entryUrl?.match(/^\/g\/([bu])\/([^/]+)\/([^/]+)\/index\.html$/);
+  return match && KEY.test(match[2]) && BUILD.test(match[3])
+    ? { store: match[1] === "b" ? "blob" : "supabase", key: match[2], build: match[3] }
+    : null;
+}
+
+/** 서빙 라우트가 받은 경로 조각(<키>/<빌드>/<파일…>)을 풀고 검사합니다. */
+export function parseGamePath(segments: string[]) {
+  let decoded: string[];
+  try {
+    // 경로 조각은 인코딩된 채로 올 수 있습니다 (이름에 공백 · 괄호가 든 파일).
+    decoded = segments.map((segment) => decodeURIComponent(segment));
+  } catch {
+    return null;
+  }
+  const [key, build, ...rest] = decoded;
+  const file = rest.join("/");
+  return key && build && KEY.test(key) && BUILD.test(build) && isSafeFilePath(file)
+    ? { key, build, file }
     : null;
 }
 
@@ -198,7 +227,10 @@ function sample(paths: string[]) {
  *   2) 저장소가 못 받는 이름 · 너무 큰 파일은 여기서 막습니다 (올리다 중간에 실패하지 않게).
  *   3) / 로 시작하는 경로처럼 "올라가긴 하지만 안 뜨는" 문제는 경고로 알려줍니다.
  */
-export async function analyzeGameFolder(picked: PickedFile[]): Promise<FolderAnalysis> {
+export async function analyzeGameFolder(
+  picked: PickedFile[],
+  limits = uploadLimits("supabase"),
+): Promise<FolderAnalysis> {
   let files = picked
     .map((p) => ({ path: p.path.replace(/\\/g, "/").replace(/^\/+/, ""), file: p.file }))
     .filter((f) => f.path && !isJunkPath(f.path));
@@ -246,15 +278,15 @@ export async function analyzeGameFolder(picked: PickedFile[]): Promise<FolderAna
   if (badNames.length > 0) {
     return {
       ok: false,
-      error: `파일 · 폴더 이름에 한글이나 일부 특수문자가 있으면 저장소가 받지 않습니다. 영문 · 숫자로 바꾼 뒤 다시 골라주세요: ${sample(badNames)}`,
+      error: `파일 · 폴더 이름에 한글이나 일부 특수문자가 있으면 올릴 수 없습니다. 영문 · 숫자로 바꾼 뒤 다시 골라주세요: ${sample(badNames)}`,
     };
   }
 
-  const tooBig = files.filter((f) => f.file.size > MAX_FILE_BYTES);
+  const tooBig = files.filter((f) => f.file.size > limits.maxFileBytes);
   if (tooBig.length > 0) {
     return {
       ok: false,
-      error: `파일 하나는 ${formatBytes(MAX_FILE_BYTES)} 까지 올릴 수 있습니다. 용량을 줄여주세요: ${sample(
+      error: `파일 하나는 ${formatBytes(limits.maxFileBytes)} 까지 올릴 수 있습니다. 용량을 줄여주세요: ${sample(
         tooBig.map((f) => `${f.path} (${formatBytes(f.file.size)})`),
       )}`,
     };
@@ -264,10 +296,10 @@ export async function analyzeGameFolder(picked: PickedFile[]): Promise<FolderAna
   if (files.length > MAX_FILES) {
     return { ok: false, error: `파일이 너무 많습니다 (${files.length}개, 최대 ${MAX_FILES}개).` };
   }
-  if (totalBytes > MAX_TOTAL_BYTES) {
+  if (totalBytes > limits.maxTotalBytes) {
     return {
       ok: false,
-      error: `전체 용량이 너무 큽니다 (${formatBytes(totalBytes)}, 최대 ${formatBytes(MAX_TOTAL_BYTES)}).`,
+      error: `전체 용량이 너무 큽니다 (${formatBytes(totalBytes)}, 최대 ${formatBytes(limits.maxTotalBytes)}).`,
     };
   }
 
