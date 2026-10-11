@@ -21,14 +21,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
+  // 운영자인지부터 확인합니다. handleUpload 는 토큰 설정을 먼저 살펴보기 때문에, 맡겨 두면
+  // 로그인하지 않은 요청에도 "저장소가 연결돼 있지 않다" 같은 내부 상태를 답하게 됩니다.
+  // (업로드 완료 통지는 Vercel 이 보내는 것이라 로그인 대신 서명으로 확인됩니다.)
+  if (body?.type === "blob.generate-client-token") {
+    const { staff } = await requireStaff();
+    if (!staff) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  }
+
   try {
     const result = await handleUpload({
       request,
       body,
       onBeforeGenerateToken: async (pathname) => {
-        const { staff } = await requireStaff();
-        if (!staff) throw new Error("권한이 없습니다.");
-
         const [key = "", build = "", ...rest] = pathname.split("/");
         if (!isGameKey(key) || !isBuildId(build) || !isSafeFilePath(rest.join("/"))) {
           throw new Error(`올릴 수 없는 경로입니다: ${pathname}`);
