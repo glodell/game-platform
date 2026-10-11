@@ -111,6 +111,40 @@ export async function finishGameUpload(input: {
   const entryUrl = uploadedEntryUrl(key, build);
   if (!gameId) return { ok: true, entryUrl, replacedTitle: null };
 
+  const switched = await pointGameAt(supabase, gameId, entryUrl);
+  if (!switched.ok) return switched;
+  return { ok: true, entryUrl, replacedTitle: switched.title };
+}
+
+export type LinkFolderResult = { ok: true; title: string } | { ok: false; error: string };
+
+/**
+ * 명령어(add-game)로 넣어 배포한 폴더를 기존 게임에 연결합니다.
+ *
+ * 웹으로 올렸던 게임을 저장소 폴더로 옮길 때 씁니다. 게임을 새로 등록하면 랭킹 · 댓글이
+ * 이어지지 않으므로, 게임은 그대로 두고 파일이 있는 곳만 바꿉니다.
+ */
+export async function linkGameFolder(gameId: string, folder: string): Promise<LinkFolderResult> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return { ok: false, error: "권한이 없습니다." };
+
+  // 실제로 배포된 폴더만 받습니다 (목록은 빌드할 때 next.config 가 public/g 에서 읽습니다).
+  const deployed = (process.env.GAME_FOLDERS ?? "").split(",").filter(Boolean);
+  if (!deployed.includes(folder)) {
+    return { ok: false, error: "배포된 게임 폴더가 아닙니다. 배포가 끝났는지 확인해 주세요." };
+  }
+
+  return pointGameAt(supabase, gameId, `/g/${folder}/index.html`);
+}
+
+/**
+ * 게임이 가리키는 파일 위치를 바꿉니다. 전에 쓰던 것이 웹으로 올린 빌드였다면 저장소에서 지웁니다.
+ */
+async function pointGameAt(
+  supabase: Awaited<ReturnType<typeof requireStaff>>["supabase"],
+  gameId: string,
+  entryUrl: string,
+): Promise<{ ok: true; title: string } | { ok: false; error: string }> {
   const { data: game } = await supabase
     .from("games")
     .select("id, slug, title, entry_url")
@@ -125,9 +159,9 @@ export async function finishGameUpload(input: {
   if (error) return { ok: false, error: `게임 경로를 바꾸지 못했습니다: ${error.message}` };
 
   // 전에 쓰던 빌드는 이제 아무도 가리키지 않으니 지웁니다 (저장 공간이 한정돼 있습니다).
-  // 실패해도 게임은 이미 새 빌드로 돌고 있으므로 조용히 넘어갑니다.
+  // 실패해도 게임은 이미 새 위치로 돌고 있으므로 조용히 넘어갑니다.
   const previous = parseUploadedEntry(game.entry_url);
-  if (previous && !(previous.key === key && previous.build === build)) {
+  if (previous && game.entry_url !== entryUrl) {
     try {
       await removeGameBuild(createAdminClient(), previous.key, previous.build);
     } catch (cause) {
@@ -138,5 +172,5 @@ export async function finishGameUpload(input: {
   revalidatePath("/admin");
   revalidatePath("/games");
   revalidatePath(`/games/${game.slug}`);
-  return { ok: true, entryUrl, replacedTitle: game.title };
+  return { ok: true, title: game.title };
 }

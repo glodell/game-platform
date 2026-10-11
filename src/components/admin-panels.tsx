@@ -13,6 +13,7 @@ import {
   setGameThumbnail,
   type AdminResult,
 } from "@/app/actions/admin";
+import { linkGameFolder } from "@/app/actions/game-upload";
 import { FEATURES } from "@/lib/site";
 import { GameUploader } from "./game-uploader";
 import { Badge } from "./ui";
@@ -331,10 +332,11 @@ function GameForm({
 
       {newFolders.length > 0 && (
         <div className="rounded-xl border border-lime-glow/40 bg-lime-glow/10 px-4 py-3 text-sm text-lime-glow">
-          아직 등록하지 않은 게임 폴더가 있습니다. 게임 경로 칸에 그대로 넣으세요.
-          <ul className="mt-1.5 space-y-0.5 font-mono text-xs">
+          명령어로 넣은 게임 폴더 중 아직 등록하지 않은 것이 있습니다. 새 게임이면 게임 경로 칸에
+          그대로 넣고, 이미 있는 게임의 새 위치라면 그 게임에 연결하세요.
+          <ul className="mt-2 space-y-2">
             {newFolders.map((folder) => (
-              <li key={folder}>/g/{folder}/index.html</li>
+              <FolderLink key={folder} folder={folder} games={games} />
             ))}
           </ul>
         </div>
@@ -380,6 +382,65 @@ function GameForm({
 
       <Submit pending={pending} state={state} label="게임 등록" />
     </form>
+  );
+}
+
+/**
+ * 명령어로 넣은 폴더 하나 — 기존 게임에 연결할 수 있습니다.
+ *
+ * 웹으로 올렸던 게임을 저장소 폴더로 옮길 때, 게임을 새로 등록하면 랭킹 · 댓글이 이어지지
+ * 않습니다. 여기서 연결하면 게임은 그대로 두고 파일이 있는 곳만 바뀝니다.
+ */
+function FolderLink({ folder, games }: { folder: string; games: { id: string; title: string }[] }) {
+  const [gameId, setGameId] = useState("");
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  function link() {
+    const title = games.find((game) => game.id === gameId)?.title ?? "";
+    if (!window.confirm(`「${title}」의 게임 파일을 /g/${folder}/ 로 바꿀까요? 바로 반영됩니다.`)) return;
+    startTransition(async () => {
+      const res = await linkGameFolder(gameId, folder);
+      setResult({ ok: res.ok, text: res.ok ? `「${res.title}」에 연결했습니다.` : res.error });
+      if (res.ok) router.refresh();
+    });
+  }
+
+  return (
+    <li className="flex flex-wrap items-center gap-2">
+      <code className="font-mono text-xs">/g/{folder}/index.html</code>
+      {games.length > 0 && (
+        <>
+          <select
+            value={gameId}
+            onChange={(event) => setGameId(event.target.value)}
+            aria-label={`${folder} 폴더를 연결할 게임`}
+            className="rounded-lg border border-ink-700 bg-ink-900/60 px-2 py-1 text-xs text-ink-100"
+          >
+            <option value="">기존 게임에 연결…</option>
+            {games.map((game) => (
+              <option key={game.id} value={game.id}>
+                {game.title}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={link}
+            disabled={!gameId || pending}
+            className="rounded-lg border border-lime-glow/50 px-2.5 py-1 text-xs font-semibold hover:bg-lime-glow/10 transition-colors disabled:opacity-40"
+          >
+            {pending ? "연결 중…" : "연결"}
+          </button>
+        </>
+      )}
+      {result && (
+        <span className={`text-xs ${result.ok ? "text-lime-glow" : "text-punch-400"}`}>
+          {result.text}
+        </span>
+      )}
+    </li>
   );
 }
 
