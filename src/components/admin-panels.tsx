@@ -178,7 +178,7 @@ function ThumbnailRow({
         `「${game.title}」을 삭제할까요?`,
         "",
         "함께 지워지는 것",
-        "· 이 게임의 랭킹 기록 전부",
+        "· 이 게임의 랭킹 기록과 랭킹 이벤트 전부",
         `· 댓글 ${game.comment_count ?? 0}개, 좋아요 ${game.like_count ?? 0}개`,
         "· 올린 게임 파일과 썸네일",
         "",

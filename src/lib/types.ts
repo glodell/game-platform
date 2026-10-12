@@ -93,6 +93,27 @@ export type TournamentDetail = Omit<Tournament, "game"> & {
     | null;
 };
 
+/**
+ * 랭킹 이벤트 — 게임 페이지에 붙는 "언제까지의 기록으로 1·2·3위" (src/lib/game-events.ts).
+ * tournaments 테이블의 행이지만, 화면에 필요한 것만 담습니다.
+ */
+export type GameEvent = {
+  id: string;
+  game_id: string;
+  title: string;
+  /** 운영자가 적은 안내 문구 (상품 등). 없을 수 있습니다. */
+  description: string | null;
+  starts_at: string;
+  ends_at: string;
+};
+
+/** 이벤트 순위 — 상위권, 참가자 수, 보고 있는 사람의 순위 */
+export type EventStanding = {
+  rows: LeaderboardRow[];
+  total: number;
+  mine: LeaderboardRow | null;
+};
+
 export type LeaderboardRow = {
   user_id: string;
   handle: string;

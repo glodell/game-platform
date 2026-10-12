@@ -8,7 +8,9 @@ import {
   type AdminNote,
 } from "@/components/admin-panels";
 import { AdminTabs } from "@/components/admin-tabs";
+import { EventManager } from "@/components/event-manager";
 import { RunReview, type ReviewRun } from "@/components/run-review";
+import { loadAdminEvents } from "@/lib/admin-events";
 import { parseTrace } from "@/lib/run-trace";
 import { formatDate, formatRelative } from "@/lib/format";
 import { gameStore } from "@/lib/game-storage";
@@ -50,6 +52,7 @@ export default async function AdminPage() {
     { data: games },
     { data: runs },
     { data: noteRows, error: notesError },
+    events,
   ] = await Promise.all([
     supabase
       .from("games")
@@ -81,6 +84,7 @@ export default async function AdminPage() {
       )
       .order("created_at", { ascending: false })
       .limit(100),
+    loadAdminEvents(supabase),
   ]);
 
   // notes 테이블은 supabase/notes.sql 을 실행해야 생깁니다 — 없으면 조회가 오류로 끝납니다.
@@ -144,6 +148,7 @@ export default async function AdminPage() {
 
   const tasks = [
     "게임 등록",
+    "랭킹 이벤트",
     "제작 노트 작성",
     ...(FEATURES.tournaments ? ["대회 개설"] : []),
     ...(FEATURES.hackathons ? ["해커톤 개설"] : []),
@@ -214,6 +219,11 @@ export default async function AdminPage() {
                 <RunReview runs={reviewRuns} />
               </>
             ),
+          },
+          {
+            key: "events",
+            label: "이벤트",
+            content: <EventManager games={publishedGames} events={events} />,
           },
           {
             key: "notes",

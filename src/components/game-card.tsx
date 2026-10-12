@@ -4,7 +4,14 @@ import { FEATURES } from "@/lib/site";
 import type { Game } from "@/lib/types";
 import { Badge } from "./ui";
 
-export function GameCard({ game }: { game: Game }) {
+export function GameCard({
+  game,
+  eventLive = false,
+}: {
+  game: Game;
+  /** 이 게임에 랭킹 이벤트가 열려 있는지 */
+  eventLive?: boolean;
+}) {
   return (
     <Link
       href={`/games/${game.slug}`}
@@ -29,6 +36,15 @@ export function GameCard({ game }: { game: Game }) {
             ) : (
               <Badge tone="lime">구독자 제작</Badge>
             )}
+          </div>
+        )}
+        {eventLive && (
+          <div className="absolute top-2.5 right-2.5">
+            {/* 썸네일 위에서도 읽히도록 배지 뒤를 어둡게 받칩니다. */}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-punch-500/50 bg-ink-950/85 px-2.5 py-0.5 text-xs font-semibold text-punch-400 backdrop-blur">
+              <span className="live-dot size-1.5 rounded-full bg-punch-400" />
+              랭킹 이벤트
+            </span>
           </div>
         )}
       </div>

@@ -15,7 +15,7 @@ export default function PrivacyPage() {
   return (
     <DocPage
       title="개인정보처리방침"
-      effective="2026년 10월 11일"
+      effective="2026년 10월 12일"
       lead="바이버후드(viberhood.io, 이하 '서비스')는 꼭 필요한 정보만 수집하고, 아래에 적은 목적으로만 씁니다."
     >
       <DocSection title="1. 수집하는 정보">
@@ -30,7 +30,7 @@ export default function PrivacyPage() {
         <DocList
           items={[
             "이름, 프로필 사진 — 닉네임 · 핸들 · 프로필로 쓰이며 랭킹과 댓글에 공개됩니다.",
-            "이메일 주소 — 계정을 구분하는 데만 쓰이고 다른 이용자에게 보이지 않습니다.",
+            "이메일 주소 — 계정을 구분하는 데 쓰이고, 랭킹 이벤트에서 1~3위에 오른 분께는 상품 안내를 드리려고 운영자가 확인합니다. 다른 이용자에게는 보이지 않습니다.",
           ]}
         />
         <p>
@@ -51,6 +51,7 @@ export default function PrivacyPage() {
           items={[
             "로그인 상태 유지와 계정 구분",
             "랭킹 · 프로필 · 댓글 표시",
+            "랭킹 이벤트 결과 확인과 1~3위 상품 안내",
             "기록 조작과 서비스 악용 방지",
             "문의 · 삭제 요청 처리",
           ]}

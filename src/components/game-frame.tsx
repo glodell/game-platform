@@ -23,12 +23,25 @@ type Props = {
   viewer: Viewer;
   tournament?: { id: string; title: string; endsAt: string } | null;
   attemptsLeft?: number | null;
+  /**
+   * 이 게임에 랭킹 이벤트가 열려 있는지 — 안내 문구에만 씁니다. 기록을 이벤트에 넣을지는
+   * 서버(/api/runs/start)가 정하므로, 이 값이 낡아도 기록이 잘못 들어가지 않습니다.
+   */
+  eventLive?: boolean;
 };
 
 type SubmitState =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "done"; score: number; rank: number | null }
+  | {
+      kind: "done";
+      score: number;
+      rank: number | null;
+      /** rank 가 이벤트(대회) 순위인지 게임 전체 순위인지 */
+      scope: "event" | "game";
+      /** 이벤트 기록으로 시작했지만 마감을 넘겨 전체 랭킹에만 남았는지 */
+      eventClosed: boolean;
+    }
   | { kind: "error"; message: string };
 
 export function GameFrame({
@@ -41,6 +54,7 @@ export function GameFrame({
   viewer,
   tournament,
   attemptsLeft,
+  eventLive = false,
 }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -133,7 +147,13 @@ export function GameFrame({
         });
         const json = await res.json();
         if (res.ok) {
-          setSubmit({ kind: "done", score, rank: json.rank ?? null });
+          setSubmit({
+            kind: "done",
+            score,
+            rank: json.rank ?? null,
+            scope: json.scope === "event" ? "event" : "game",
+            eventClosed: Boolean(json.eventClosed),
+          });
           postResult({ ok: true, rank: json.rank ?? null, best: json.best });
         } else {
           setSubmit({ kind: "error", message: json.error ?? "기록 저장에 실패했습니다." });
@@ -263,6 +283,7 @@ export function GameFrame({
       viewer={viewer}
       attemptsLeft={attemptsLeft}
       inTournament={Boolean(tournament)}
+      eventLive={eventLive}
     />
   );
 
@@ -353,12 +374,14 @@ function StatusBar({
   viewer,
   attemptsLeft,
   inTournament,
+  eventLive,
 }: {
   state: SubmitState;
   scoreUnit: string | null;
   viewer: Viewer;
   attemptsLeft?: number | null;
   inTournament: boolean;
+  eventLive: boolean;
 }) {
   if (state.kind === "sending") {
     return <Bar tone="neutral">기록을 저장하는 중…</Bar>;
@@ -370,9 +393,13 @@ function StatusBar({
         <span className="font-bold">{formatScore(state.score, scoreUnit)}</span> 기록 완료
         {state.rank ? (
           <>
-            {" "}— 현재 <span className="font-bold text-neon-400">{state.rank}위</span>
+            {" "}— {state.scope === "event" && !inTournament ? "이벤트 " : ""}현재{" "}
+            <span className="font-bold text-neon-400">{state.rank}위</span>
           </>
         ) : null}
+        {state.eventClosed && (
+          <span className="text-ink-300"> · 이벤트가 마감되어 전체 랭킹에만 반영됐습니다</span>
+        )}
       </Bar>
     );
   }
@@ -382,7 +409,13 @@ function StatusBar({
   }
 
   if (!viewer) {
-    return <Bar tone="neutral">지금은 연습 모드입니다. 로그인하면 점수가 랭킹에 올라갑니다.</Bar>;
+    return (
+      <Bar tone="neutral">
+        {eventLive
+          ? "지금은 연습 모드입니다. 로그인하고 플레이하면 랭킹 이벤트에 참가됩니다."
+          : "지금은 연습 모드입니다. 로그인하면 점수가 랭킹에 올라갑니다."}
+      </Bar>
+    );
   }
 
   if (inTournament && typeof attemptsLeft === "number") {
@@ -395,7 +428,13 @@ function StatusBar({
     );
   }
 
-  return <Bar tone="neutral">한 판이 끝나면 점수가 자동으로 랭킹에 올라갑니다.</Bar>;
+  return (
+    <Bar tone="neutral">
+      {eventLive
+        ? "한 판이 끝나면 점수가 자동으로 이벤트 순위와 전체 랭킹에 올라갑니다."
+        : "한 판이 끝나면 점수가 자동으로 랭킹에 올라갑니다."}
+    </Bar>
+  );
 }
 
 function Bar({ tone, children }: { tone: "neutral" | "good" | "bad"; children: React.ReactNode }) {

@@ -11,10 +11,13 @@ export function Countdown({
   target,
   label,
   compact = false,
+  prefix,
 }: {
   target: string;
   label?: string;
   compact?: boolean;
+  /** compact 일 때 숫자 앞에 붙는 말 (예: "마감까지"). 마감된 뒤에는 붙지 않습니다. */
+  prefix?: string;
 }) {
   const targetMs = new Date(target).getTime();
   const [now, setNow] = useState<number | null>(null);
@@ -39,7 +42,12 @@ export function Countdown({
         : t.days > 0
           ? `${t.days}일 ${t.hours}시간`
           : `${String(t.hours).padStart(2, "0")}:${String(t.minutes).padStart(2, "0")}:${String(t.seconds).padStart(2, "0")}`;
-    return <span className="tabular-nums font-semibold">{text}</span>;
+    return (
+      <>
+        {prefix && `${prefix} `}
+        <span className="tabular-nums font-semibold">{text}</span>
+      </>
+    );
   }
 
   const cells = [

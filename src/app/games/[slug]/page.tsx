@@ -2,14 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Comments } from "@/components/comments";
+import { EndedEventPanel, LiveEventBanner, MyEventRank } from "@/components/game-event";
 import { GameFrame } from "@/components/game-frame";
 import { Leaderboard } from "@/components/leaderboard";
 import { LikeButton } from "@/components/like-button";
+import { RankTabs } from "@/components/rank-tabs";
 import { Badge, SectionHeader } from "@/components/ui";
 import { formatCompact, formatDate } from "@/lib/format";
 import {
   getComments,
+  getEventStanding,
   getGameBySlug,
+  getGameEvent,
   getGameLeaderboard,
   getViewer,
   hasLiked,
@@ -50,12 +54,18 @@ export default async function GameDetailPage({
 
   if ((game.status !== "published" || shelved) && !isStaff && !isAuthor) notFound();
 
-  const [leaderboard, comments, liked, allTournaments] = await Promise.all([
+  const [leaderboard, comments, liked, allTournaments, event] = await Promise.all([
     getGameLeaderboard(game.id, 20),
     getComments(game.id),
     hasLiked(game.id, viewer?.id),
     FEATURES.tournaments ? listTournaments("live") : [],
+    // 랭킹 이벤트는 공개된 게임에만 붙습니다 (미공개 게임은 기록 자체를 받지 않습니다).
+    game.status === "published" ? getGameEvent(game.id) : null,
   ]);
+
+  // 랭킹 이벤트 — 진행 중이면 타이머와 이벤트 순위를, 끝났으면 결과를 보여줍니다.
+  const eventLive = event ? new Date(event.ends_at).getTime() >= Date.now() : false;
+  const standing = event ? await getEventStanding(event.id, viewer?.id, eventLive ? 20 : 3) : null;
 
   const liveTournament = allTournaments.find((t) => t.game_id === game.id) ?? null;
   const srcDoc = game.source === "html" && game.html ? wrapUserGame(game.html, siteUrl()) : null;
@@ -114,6 +124,12 @@ export default async function GameDetailPage({
             </Link>
           )}
 
+          {event && eventLive && (
+            <div className="mt-5">
+              <LiveEventBanner event={event} />
+            </div>
+          )}
+
           <div className="mt-5">
             <GameFrame
               gameId={game.id}
@@ -123,6 +139,7 @@ export default async function GameDetailPage({
               isolated={entry.isolated}
               srcDoc={srcDoc}
               viewer={viewer ? { id: viewer.id, display_name: viewer.display_name } : null}
+              eventLive={eventLive}
             />
           </div>
 
@@ -135,6 +152,17 @@ export default async function GameDetailPage({
               canLike={Boolean(viewer)}
             />
           </div>
+
+          {event && standing && !eventLive && (
+            <div className="mt-8">
+              <EndedEventPanel
+                event={event}
+                standing={standing}
+                scoreUnit={game.score_unit}
+                signedIn={Boolean(viewer)}
+              />
+            </div>
+          )}
 
           {game.description && (
             <section className="mt-10">
@@ -159,15 +187,52 @@ export default async function GameDetailPage({
 
         {/* 오른쪽: 랭킹 */}
         <aside className="panel p-5 lg:sticky lg:top-20">
-          <h2 className="font-black text-lg mb-1">전체 랭킹</h2>
+          <h2 className="font-black text-lg mb-1">{eventLive ? "랭킹" : "전체 랭킹"}</h2>
           <p className="text-xs text-ink-400 mb-4">
             {game.scoring === "high" ? "점수가 높을수록" : "기록이 낮을수록"} 상위
           </p>
-          <Leaderboard
-            rows={leaderboard}
-            scoreUnit={game.score_unit}
-            viewerId={viewer?.id ?? null}
-          />
+          {event && standing && eventLive ? (
+            <RankTabs
+              tabs={[
+                {
+                  key: "event",
+                  label: "이벤트 순위",
+                  content: (
+                    <>
+                      <MyEventRank standing={standing} />
+                      <Leaderboard
+                        rows={standing.rows}
+                        scoreUnit={game.score_unit}
+                        viewerId={viewer?.id ?? null}
+                        emptyText="아직 참가자가 없습니다. 지금 기록을 남기면 1위입니다."
+                      />
+                      <p className="text-xs text-ink-600 mt-3">
+                        이벤트가 시작된 뒤의 기록만 셉니다 · 참가{" "}
+                        {standing.total.toLocaleString("ko-KR")}명
+                      </p>
+                    </>
+                  ),
+                },
+                {
+                  key: "all",
+                  label: "전체 랭킹",
+                  content: (
+                    <Leaderboard
+                      rows={leaderboard}
+                      scoreUnit={game.score_unit}
+                      viewerId={viewer?.id ?? null}
+                    />
+                  ),
+                },
+              ]}
+            />
+          ) : (
+            <Leaderboard
+              rows={leaderboard}
+              scoreUnit={game.score_unit}
+              viewerId={viewer?.id ?? null}
+            />
+          )}
         </aside>
       </div>
     </div>

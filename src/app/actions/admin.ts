@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { EVENT_MAX_DAYS, findLiveEvent } from "@/lib/game-events";
 import { requireStaff } from "@/lib/staff";
 import { removeUploadedBuildIfUnused } from "@/lib/uploaded-builds";
 import { removeUploadedImageIfUnused } from "@/lib/uploaded-images";
@@ -156,6 +157,148 @@ export async function deleteGame(gameId: string): Promise<AdminResult> {
     message += ` 게임 파일은 코드 저장소의 public/g/${game.entry_url.split("/")[2]} 폴더에 남아 있습니다.`;
   }
   return { ok: true, message };
+}
+
+/* ------------------------------------------------------------------ */
+/* 랭킹 이벤트 (src/lib/game-events.ts)                                  */
+/* ------------------------------------------------------------------ */
+
+/** 마감 시각 확인. 쓸 수 있으면 Date 를, 아니면 안내 문구를 돌려줍니다. */
+function parseDeadline(endsAtIso: string): Date | string {
+  const endsAt = new Date(endsAtIso);
+  if (!endsAtIso || Number.isNaN(endsAt.getTime())) return "마감 시각을 입력해 주세요.";
+  if (endsAt.getTime() <= Date.now()) return "마감 시각이 이미 지났습니다.";
+  if (endsAt.getTime() > Date.now() + EVENT_MAX_DAYS * 86_400_000) {
+    return "마감은 1년 이내로 정해 주세요.";
+  }
+  return endsAt;
+}
+
+function revalidateEvent(gameSlug: string | null | undefined) {
+  revalidatePath("/admin");
+  revalidatePath("/games");
+  revalidatePath("/");
+  if (gameSlug) revalidatePath(`/games/${gameSlug}`);
+}
+
+/**
+ * 랭킹 이벤트 시작 — 지금부터 마감 시각까지의 기록으로 순위를 가립니다.
+ *
+ * 시작 시각은 받지 않고 "지금" 으로 둡니다. 로그인하고 그 게임을 플레이한 판이 자동으로
+ * 이벤트 기록이 되므로, 시작과 동시에 참가가 열립니다.
+ */
+export async function startGameEvent(
+  gameId: string,
+  endsAtIso: string,
+  note: string,
+): Promise<AdminResult> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return { ok: false, error: "권한이 없습니다." };
+
+  const endsAt = parseDeadline(endsAtIso);
+  if (typeof endsAt === "string") return { ok: false, error: endsAt };
+
+  const description = String(note ?? "").trim();
+  if (description.length > 200) return { ok: false, error: "안내 문구는 200자까지입니다." };
+
+  const { data: game } = await supabase
+    .from("games")
+    .select("id, slug, title, status")
+    .eq("id", gameId)
+    .maybeSingle();
+  if (!game) return { ok: false, error: "게임을 선택해 주세요." };
+  if (game.status !== "published") {
+    return { ok: false, error: "공개된 게임에만 이벤트를 열 수 있습니다." };
+  }
+
+  // 한 게임에 이벤트는 하나씩 — 두 개가 겹치면 기록이 어느 쪽에 들어갈지 알 수 없습니다.
+  if (await findLiveEvent(supabase, gameId)) {
+    return {
+      ok: false,
+      error: "이 게임에는 이미 진행 중인 이벤트가 있습니다. 아래 목록에서 마감 시각을 바꿀 수 있습니다.",
+    };
+  }
+
+  const { error } = await supabase.from("tournaments").insert({
+    slug: `event-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    game_id: game.id,
+    title: `${game.title} 랭킹 이벤트`,
+    description: description || null,
+    starts_at: new Date().toISOString(),
+    ends_at: endsAt.toISOString(),
+    prizes: [],
+    max_attempts: null,
+    is_published: true,
+  });
+  if (error) return { ok: false, error: `이벤트를 시작하지 못했습니다: ${error.message}` };
+
+  revalidateEvent(game.slug);
+  return {
+    ok: true,
+    message: `「${game.title}」 랭킹 이벤트를 시작했습니다. 지금부터의 기록이 이벤트 순위에 들어갑니다.`,
+  };
+}
+
+/**
+ * 진행 중인 이벤트의 마감 시각을 바꿉니다. endsAtIso 를 비우면(null) 지금 바로 마감합니다.
+ * 이미 끝난 이벤트는 바꾸지 않습니다 — 끝난 뒤의 기록은 이벤트에 들어가지 않았으므로, 마감을
+ * 뒤로 늘려도 그사이 기록이 빠진 순위가 됩니다. 새 이벤트를 여는 쪽이 맞습니다.
+ */
+export async function changeEventDeadline(
+  eventId: string,
+  endsAtIso: string | null,
+): Promise<AdminResult> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return { ok: false, error: "권한이 없습니다." };
+
+  const endsAt = endsAtIso === null ? new Date() : parseDeadline(endsAtIso);
+  if (typeof endsAt === "string") return { ok: false, error: endsAt };
+
+  const { data: event } = await supabase
+    .from("tournaments")
+    .select("id, ends_at, max_attempts, game:games!tournaments_game_id_fkey(slug)")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (!event || event.max_attempts !== null) {
+    return { ok: false, error: "이벤트를 찾을 수 없습니다." };
+  }
+  if (new Date(event.ends_at).getTime() < Date.now()) {
+    return { ok: false, error: "이미 끝난 이벤트입니다. 새 이벤트를 열어 주세요." };
+  }
+
+  const { error } = await supabase
+    .from("tournaments")
+    .update({ ends_at: endsAt.toISOString() })
+    .eq("id", eventId);
+  if (error) return { ok: false, error: `마감 시각을 바꾸지 못했습니다: ${error.message}` };
+
+  revalidateEvent((event.game as unknown as { slug: string } | null)?.slug);
+  return {
+    ok: true,
+    message: endsAtIso === null ? "이벤트를 마감했습니다." : "마감 시각을 바꿨습니다.",
+  };
+}
+
+/**
+ * 이벤트 삭제 — 게임 페이지의 타이머 · 결과와 이벤트 순위가 사라집니다.
+ * 플레이 기록 자체는 지워지지 않고 게임의 전체 랭킹에 남습니다 (DB 가 이벤트 표시만 뗍니다).
+ */
+export async function deleteGameEvent(eventId: string): Promise<AdminResult> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return { ok: false, error: "권한이 없습니다." };
+
+  const { data, error } = await supabase
+    .from("tournaments")
+    .delete()
+    .eq("id", eventId)
+    .is("max_attempts", null)
+    .select("id, game:games!tournaments_game_id_fkey(slug)")
+    .maybeSingle();
+  if (error) return { ok: false, error: `삭제 실패: ${error.message}` };
+  if (!data) return { ok: false, error: "이벤트를 찾을 수 없습니다." };
+
+  revalidateEvent((data.game as unknown as { slug: string } | null)?.slug);
+  return { ok: true, message: "이벤트를 지웠습니다. 플레이 기록은 전체 랭킹에 남아 있습니다." };
 }
 
 /**

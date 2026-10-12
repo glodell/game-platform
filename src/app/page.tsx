@@ -4,21 +4,29 @@ import { GameCard } from "@/components/game-card";
 import { NoteCard } from "@/components/note-card";
 import { TournamentCard } from "@/components/tournament-card";
 import { EmptyState, PhaseBadge, SectionHeader } from "@/components/ui";
-import { listGames, listHackathons, listNotes, listTournaments } from "@/lib/queries";
+import {
+  listGames,
+  listHackathons,
+  listLiveEventGameIds,
+  listNotes,
+  listTournaments,
+} from "@/lib/queries";
 import { formatDateTime } from "@/lib/format";
 import { FEATURES, SOCIAL } from "@/lib/site";
 import { phaseOf, type Prize } from "@/lib/types";
 
 export default async function HomePage() {
   // 꺼 둔 기능은 조회 자체를 하지 않습니다.
-  const [liveTournaments, upcoming, popular, community, hackathons, notes] = await Promise.all([
-    FEATURES.tournaments ? listTournaments("live") : [],
-    FEATURES.tournaments ? listTournaments("upcoming") : [],
-    listGames({ sort: "popular", limit: 8 }),
-    FEATURES.community ? listGames({ kind: "community", sort: "recent", limit: 4 }) : [],
-    FEATURES.hackathons ? listHackathons() : [],
-    listNotes(3),
-  ]);
+  const [liveTournaments, upcoming, popular, community, hackathons, notes, eventGames] =
+    await Promise.all([
+      FEATURES.tournaments ? listTournaments("live") : [],
+      FEATURES.tournaments ? listTournaments("upcoming") : [],
+      listGames({ sort: "popular", limit: 8 }),
+      FEATURES.community ? listGames({ kind: "community", sort: "recent", limit: 4 }) : [],
+      FEATURES.hackathons ? listHackathons() : [],
+      listNotes(3),
+      listLiveEventGameIds(),
+    ]);
 
   const featuredTournaments = [...liveTournaments, ...upcoming].slice(0, 2);
   const openHackathon = hackathons.find(
@@ -59,7 +67,7 @@ export default async function HomePage() {
         ) : (
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
             {popular.map((game) => (
-              <GameCard key={game.id} game={game} />
+              <GameCard key={game.id} game={game} eventLive={eventGames.has(game.id)} />
             ))}
           </div>
         )}
@@ -117,7 +125,7 @@ export default async function HomePage() {
           />
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
             {community.map((game) => (
-              <GameCard key={game.id} game={game} />
+              <GameCard key={game.id} game={game} eventLive={eventGames.has(game.id)} />
             ))}
           </div>
         </section>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { findLiveEvent } from "@/lib/game-events";
 import { issueRunToken } from "@/lib/run-token";
 import { TOO_MANY, rateLimit } from "@/lib/rate-limit";
 
@@ -41,7 +42,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "플레이할 수 없는 게임입니다." }, { status: 404 });
   }
 
-  if (tournamentId) {
+  // 이 판의 기록이 들어갈 대회 · 랭킹 이벤트
+  let eventId: string | null = tournamentId ?? null;
+
+  if (!tournamentId) {
+    // 게임 페이지에서 그냥 시작한 판 — 이 게임에 진행 중인 랭킹 이벤트가 있으면 거기에 넣습니다.
+    // 참가 버튼 없이 "로그인하고 플레이하면 참가" 가 되게 하려는 것이고, 화면이 아니라 서버가
+    // 정하므로 페이지를 열어 둔 사이에 이벤트가 시작되거나 끝나도 어긋나지 않습니다.
+    eventId = (await findLiveEvent(supabase, gameId))?.id ?? null;
+  } else {
     const { data: tournament } = await supabase
       .from("tournaments")
       .select("id, game_id, starts_at, ends_at, max_attempts, is_published")
@@ -79,7 +88,7 @@ export async function POST(request: Request) {
   const { token } = issueRunToken({
     sub: user.id,
     gid: gameId,
-    tid: tournamentId ?? null,
+    tid: eventId,
   });
 
   return NextResponse.json({ token });

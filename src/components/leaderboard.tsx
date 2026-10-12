@@ -64,10 +64,11 @@ export function Podium({
 }) {
   const top = [rows.find((r) => r.rank === 1), rows.find((r) => r.rank === 2), rows.find((r) => r.rank === 3)];
   const order = [1, 0, 2]; // 2등 - 1등 - 3등 배치
-  const heights = ["h-20", "h-28", "h-16"];
+  // 아래 둘은 등수 순서입니다 (1등, 2등, 3등) — 화면에 놓이는 순서가 아닙니다.
+  const heights = ["h-28", "h-20", "h-16"];
   const tones = [
-    "from-silver/25 border-silver/40",
     "from-gold/25 border-gold/40",
+    "from-silver/25 border-silver/40",
     "from-bronze/25 border-bronze/40",
   ];
 
@@ -89,7 +90,9 @@ export function Podium({
           <div key={rank} className="text-center">
             {row ? (
               <>
-                <Avatar url={row.avatar_url} name={row.display_name} size={48} />
+                <div className="flex justify-center">
+                  <Avatar url={row.avatar_url} name={row.display_name} size={48} />
+                </div>
                 <p className="text-sm font-bold truncate mt-2">{row.display_name}</p>
                 <p className="text-xs tabular-nums text-ink-300">
                   {formatScore(row.score, scoreUnit)}

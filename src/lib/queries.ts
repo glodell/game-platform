@@ -1,9 +1,12 @@
 import { cache } from "react";
+import { EVENT_FIELDS } from "@/lib/game-events";
 import { FEATURES } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Comment,
+  EventStanding,
   Game,
+  GameEvent,
   Hackathon,
   LeaderboardRow,
   Note,
@@ -103,6 +106,71 @@ export async function getTournamentLeaderboard(
     .order("rank")
     .limit(limit);
   return (data as LeaderboardRow[]) ?? [];
+}
+
+const LEADERBOARD_FIELDS =
+  "user_id, handle, display_name, avatar_url, score, duration_ms, created_at, rank";
+
+/**
+ * 게임 페이지에 띄울 랭킹 이벤트 — 진행 중인 것, 없으면 가장 최근에 끝난 것.
+ * 끝난 이벤트의 결과는 운영자가 지우거나 새 이벤트를 열 때까지 게임 페이지에 남습니다.
+ */
+export async function getGameEvent(gameId: string): Promise<GameEvent | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tournaments")
+    .select(EVENT_FIELDS)
+    .eq("game_id", gameId)
+    .eq("is_published", true)
+    .is("max_attempts", null)
+    .lte("starts_at", new Date().toISOString())
+    .order("ends_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as GameEvent) ?? null;
+}
+
+/** 이벤트 순위 — 상위권과 참가자 수, 그리고 로그인한 사람 자신의 순위(상위권 밖이어도). */
+export async function getEventStanding(
+  eventId: string,
+  viewerId: string | null | undefined,
+  limit = 20,
+): Promise<EventStanding> {
+  const supabase = await createClient();
+  const [rows, { count }, mine] = await Promise.all([
+    getTournamentLeaderboard(eventId, limit),
+    supabase
+      .from("tournament_leaderboard")
+      .select("user_id", { count: "exact", head: true })
+      .eq("tournament_id", eventId),
+    viewerId
+      ? supabase
+          .from("tournament_leaderboard")
+          .select(LEADERBOARD_FIELDS)
+          .eq("tournament_id", eventId)
+          .eq("user_id", viewerId)
+          .maybeSingle()
+      : null,
+  ]);
+  return {
+    rows,
+    total: count ?? rows.length,
+    mine: (mine?.data as LeaderboardRow | null) ?? null,
+  };
+}
+
+/** 지금 랭킹 이벤트가 열려 있는 게임들 — 게임 카드에 표시를 다는 데 씁니다. */
+export async function listLiveEventGameIds(): Promise<Set<string>> {
+  const supabase = await createClient();
+  const nowIso = new Date().toISOString();
+  const { data } = await supabase
+    .from("tournaments")
+    .select("game_id")
+    .eq("is_published", true)
+    .is("max_attempts", null)
+    .lte("starts_at", nowIso)
+    .gte("ends_at", nowIso);
+  return new Set((data ?? []).map((row) => row.game_id as string));
 }
 
 export async function getComments(gameId: string): Promise<Comment[]> {

@@ -73,39 +73,38 @@ export async function POST(request: Request) {
     scoringLow: game?.scoring === "low",
   });
 
-  // 대회 기록이면 마감 시간과 도전 횟수를 저장 직전에 다시 확인합니다.
+  // 대회 · 랭킹 이벤트 기록이면 마감 시간과 도전 횟수를 저장 직전에 다시 확인합니다.
   //
   // 횟수를 /api/runs/start 에서만 세면 우회할 수 있습니다. 토큰은 발급될 때
   // 소비되지 않고 3시간 유효하므로, 하나도 제출하지 않은 채 start 를 여러 번
   // 부르면 매번 "0회 사용"으로 통과해 토큰이 무제한으로 나옵니다.
   // 그래서 실제로 기록이 쌓이는 이 지점의 확인이 유일하게 믿을 수 있는 확인입니다.
-  if (payload.tid) {
+  //
+  // 마감을 넘긴 기록은 버리지 않고 대회 표시만 떼어 저장합니다 — 게임의 전체 랭킹에는
+  // 남습니다. 마감 직전에 시작한 판이 마감 뒤에 끝났다고 기록이 통째로 사라지면 안 됩니다.
+  let tournamentId: string | null = payload.tid ?? null;
+  let eventClosed = false;
+
+  if (tournamentId) {
     const { data: tournament } = await supabase
       .from("tournaments")
       .select("starts_at, ends_at, max_attempts")
-      .eq("id", payload.tid)
-      .single();
+      .eq("id", tournamentId)
+      .maybeSingle();
 
-    if (!tournament) {
-      return NextResponse.json({ error: "대회를 찾을 수 없습니다." }, { status: 404 });
-    }
     const now = Date.now();
-    if (now < new Date(tournament.starts_at).getTime()) {
+    if (!tournament || now > new Date(tournament.ends_at).getTime()) {
+      // 그사이 마감됐거나 운영자가 지운 경우
+      tournamentId = null;
+      eventClosed = true;
+    } else if (now < new Date(tournament.starts_at).getTime()) {
       return NextResponse.json({ error: "아직 시작하지 않은 대회입니다." }, { status: 409 });
-    }
-    if (now > new Date(tournament.ends_at).getTime()) {
-      return NextResponse.json(
-        { error: "대회가 마감되어 이 기록은 랭킹에 반영되지 않습니다." },
-        { status: 409 },
-      );
-    }
-
-    if (tournament.max_attempts) {
+    } else if (tournament.max_attempts) {
       // runs 는 RLS 로 클라이언트 INSERT 가 막혀 있어 admin 으로 세야 정확합니다.
       const { count } = await admin
         .from("runs")
         .select("id", { count: "exact", head: true })
-        .eq("tournament_id", payload.tid)
+        .eq("tournament_id", tournamentId)
         .eq("user_id", user.id);
 
       if ((count ?? 0) >= tournament.max_attempts) {
@@ -119,7 +118,7 @@ export async function POST(request: Request) {
 
   const runRow = {
     game_id: payload.gid,
-    tournament_id: payload.tid,
+    tournament_id: tournamentId,
     user_id: user.id,
     score: numericScore,
     duration_ms: reportedDurationMs,
@@ -154,9 +153,9 @@ export async function POST(request: Request) {
   }
 
   // 갱신된 순위 조회
-  const view = payload.tid ? "tournament_leaderboard" : "game_leaderboard";
-  const column = payload.tid ? "tournament_id" : "game_id";
-  const target = payload.tid ?? payload.gid;
+  const view = tournamentId ? "tournament_leaderboard" : "game_leaderboard";
+  const column = tournamentId ? "tournament_id" : "game_id";
+  const target = tournamentId ?? payload.gid;
 
   const { data: row } = await supabase
     .from(view)
@@ -170,5 +169,9 @@ export async function POST(request: Request) {
     runId: run.id,
     rank: row?.rank ?? null,
     best: row?.score ?? numericScore,
+    // rank 가 어느 순위인지 — 대회 · 랭킹 이벤트 순위("event")인지 게임 전체 순위("game")인지
+    scope: tournamentId ? "event" : "game",
+    // 대회 기록으로 시작했지만 마감을 넘겨 전체 랭킹에만 남은 경우
+    eventClosed,
   });
 }

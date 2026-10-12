@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { GameCard } from "@/components/game-card";
 import { EmptyState } from "@/components/ui";
-import { listGames } from "@/lib/queries";
+import { listGames, listLiveEventGameIds } from "@/lib/queries";
 import { FEATURES } from "@/lib/site";
 
 export const metadata: Metadata = { title: "게임" };
@@ -35,7 +35,10 @@ export default async function GamesPage({
       ? params.sort
       : "recent";
 
-  const games = await listGames({ kind, sort, limit: 60 });
+  const [games, eventGames] = await Promise.all([
+    listGames({ kind, sort, limit: 60 }),
+    listLiveEventGameIds(),
+  ]);
 
   function href(next: { kind?: string; sort?: string }) {
     const sp = new URLSearchParams();
@@ -91,7 +94,7 @@ export default async function GamesPage({
       ) : (
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           {games.map((game) => (
-            <GameCard key={game.id} game={game} />
+            <GameCard key={game.id} game={game} eventLive={eventGames.has(game.id)} />
           ))}
         </div>
       )}
