@@ -137,6 +137,7 @@ export default async function GameDetailPage({
               scoreUnit={game.score_unit}
               entryUrl={entry.url}
               isolated={entry.isolated}
+              fallbackUrl={entry.fallbackUrl}
               srcDoc={srcDoc}
               viewer={viewer ? { id: viewer.id, display_name: viewer.display_name } : null}
               eventLive={eventLive}

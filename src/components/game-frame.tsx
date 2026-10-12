@@ -20,6 +20,8 @@ type Props = {
   srcDoc?: string | null;
   /** 게임 전용 주소에서 내려주는 폴더 게임 — 자기 오리진을 줍니다 (resolveGameEntry 가 정함). */
   isolated?: boolean;
+  /** 게임 전용 주소에 닿지 않는 브라우저에서 대신 열 주소 (이 사이트의 /g/… 경로). isolated 일 때만 옵니다. */
+  fallbackUrl?: string | null;
   viewer: Viewer;
   tournament?: { id: string; title: string; endsAt: string } | null;
   attemptsLeft?: number | null;
@@ -51,6 +53,7 @@ export function GameFrame({
   entryUrl,
   srcDoc,
   isolated = false,
+  fallbackUrl,
   viewer,
   tournament,
   attemptsLeft,
@@ -63,6 +66,54 @@ export function GameFrame({
   const [live, setLive] = useState(false);
   const [submit, setSubmit] = useState<SubmitState>({ kind: "idle" });
   const [fetchingToken, setFetchingToken] = useState(false);
+
+  /**
+   * 게임 전용 주소는 "이 브라우저에서 실제로 닿는지" 먼저 확인하고 엽니다.
+   *
+   * 그 주소가 안 열리는 방문자가 있을 수 있습니다 — DNS 가 아직 다 퍼지지 않았거나, 그 주소만
+   * 막힌 망이거나. iframe 은 못 여는 주소를 줘도 실패를 알려주지 않아서 그대로 두면 빈 화면만
+   * 남습니다. 그래서 작은 파일 하나를 먼저 받아 보고, 안 닿으면 이 사이트 주소(fallbackUrl)로
+   * 엽니다. 그때는 게임에 자기 오리진을 주지 않는 예전 샌드박스 그대로라, 저장소(localStorage)만
+   * 못 쓸 뿐 게임과 랭킹은 똑같이 됩니다.
+   */
+  const probing = isolated && !srcDoc && Boolean(entryUrl) && Boolean(fallbackUrl);
+  const [reach, setReach] = useState<"checking" | "ok" | "unreachable">(
+    probing ? "checking" : "ok",
+  );
+
+  useEffect(() => {
+    if (!probing || !entryUrl) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 4000);
+
+    // 응답 내용은 볼 필요가 없어 no-cors 로 받습니다 — 닿기만 하면 성공, 주소를 못 찾으면 실패입니다.
+    fetch(new URL("/sdk/arcade.js", entryUrl), {
+      method: "HEAD",
+      mode: "no-cors",
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(() => {
+        if (!cancelled) setReach("ok");
+      })
+      .catch(() => {
+        if (!cancelled) setReach("unreachable");
+      })
+      .finally(() => window.clearTimeout(timer));
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [entryUrl, probing]);
+
+  // 자기 오리진(allow-same-origin)은 게임 전용 주소로 열 때만 줍니다. 이 사이트 주소로 여는
+  // 경우에 주면 게임이 이 사이트의 로그인 정보에 닿습니다 (서버도 헤더로 한 번 더 막습니다).
+  const useIsolated = isolated && !srcDoc && reach === "ok";
+  const frameSrc = reach === "unreachable" ? fallbackUrl : entryUrl;
 
   const canSubmit = Boolean(viewer) && (attemptsLeft === null || attemptsLeft === undefined || attemptsLeft > 0);
 
@@ -298,15 +349,23 @@ export function GameFrame({
               "relative rounded-2xl overflow-hidden border border-ink-700 bg-black aspect-[4/3] sm:aspect-video touch-manipulation"
         }
       >
-        <iframe
-          ref={frameRef}
-          title={title}
-          className="absolute inset-0 size-full"
-          // 붙여넣은 HTML(srcdoc)은 이 페이지의 오리진을 물려받으므로 절대 자기 오리진을 주지 않습니다.
-          sandbox={isolated && !srcDoc ? GAME_SANDBOX_ISOLATED : GAME_SANDBOX}
-          allow={srcDoc ? GAME_ALLOW : GAME_ALLOW_TRUSTED}
-          {...(srcDoc ? { srcDoc } : { src: entryUrl ?? "about:blank" })}
-        />
+        {reach === "checking" ? (
+          <p className="absolute inset-0 grid place-items-center text-sm text-ink-600">
+            게임을 불러오는 중…
+          </p>
+        ) : (
+          <iframe
+            // 샌드박스 권한은 문서를 열 때 정해지므로, 여는 방식이 바뀌면 프레임을 새로 만듭니다.
+            key={useIsolated ? "isolated" : "plain"}
+            ref={frameRef}
+            title={title}
+            className="absolute inset-0 size-full"
+            // 붙여넣은 HTML(srcdoc)은 이 페이지의 오리진을 물려받으므로 절대 자기 오리진을 주지 않습니다.
+            sandbox={useIsolated ? GAME_SANDBOX_ISOLATED : GAME_SANDBOX}
+            allow={srcDoc ? GAME_ALLOW : GAME_ALLOW_TRUSTED}
+            {...(srcDoc ? { srcDoc } : { src: frameSrc ?? "about:blank" })}
+          />
+        )}
 
         {/*
           진행 중인 점수는 여기서 따로 띄우지 않습니다 — 게임이 자기 화면에 이미 보여주므로 같은

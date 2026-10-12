@@ -145,15 +145,20 @@ export function isolatedGameOrigin(): string | null {
  *
  * 자기 오리진을 받는 것은 이 저장소의 폴더 게임(/g/…)을 게임 전용 주소에서 내려줄 때뿐입니다.
  * 붙여넣은 HTML(srcdoc)과 외부 주소는 지금처럼 오리진 없는 샌드박스에 둡니다.
+ *
+ * fallbackUrl 은 방문자의 브라우저가 게임 전용 주소에 닿지 못할 때 대신 여는 주소입니다
+ * (같은 파일의 이 사이트 쪽 경로). DNS 가 아직 다 퍼지지 않았거나 그 주소만 막힌 망에서도
+ * 게임은 떠야 하기 때문이고, 그때는 예전처럼 오리진 없는 샌드박스로 돕니다 — GameFrame 참고.
  */
 export function resolveGameEntry(entryUrl: string | null | undefined): {
   url: string | null;
   isolated: boolean;
+  fallbackUrl: string | null;
 } {
   const games = isolatedGameOrigin();
   // ".." 로 /g 밖을 가리키는 경로는 게임 파일이 아니므로 자기 오리진을 주지 않습니다.
   if (games && entryUrl?.startsWith("/g/") && !entryUrl.includes("..")) {
-    return { url: `${games}${entryUrl}`, isolated: true };
+    return { url: `${games}${entryUrl}`, isolated: true, fallbackUrl: entryUrl };
   }
-  return { url: entryUrl ?? null, isolated: false };
+  return { url: entryUrl ?? null, isolated: false, fallbackUrl: null };
 }
