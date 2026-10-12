@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/staff";
+import { removeUploadedBuildIfUnused } from "@/lib/uploaded-builds";
 import { removeUploadedImageIfUnused } from "@/lib/uploaded-images";
 import { parseYouTube } from "@/lib/youtube";
 
@@ -107,6 +108,54 @@ export async function setGameThumbnail(gameId: string, rawUrl: string): Promise<
   revalidatePath("/games");
   revalidatePath(`/games/${data.slug}`);
   return { ok: true, message: url ? "썸네일을 저장했습니다." : "썸네일을 지웠습니다." };
+}
+
+/**
+ * 게임 삭제.
+ *
+ * 게임과 함께 랭킹 기록 · 댓글 · 좋아요, 그 게임으로 연 대회가 지워집니다 (DB 가 연결된 행을
+ * 함께 지웁니다). 제작 노트는 남고 게임과의 연결만 끊깁니다. 되돌릴 수 없습니다.
+ *
+ * DB 를 먼저 지우고 저장소 파일을 그다음에 지웁니다. 반대로 하다가 중간에 실패하면 "목록에는
+ * 있는데 열리지 않는 게임" 이 남습니다. 이 순서라면 실패해도 파일만 남고, 그건 해가 없습니다.
+ */
+export async function deleteGame(gameId: string): Promise<AdminResult> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return { ok: false, error: "권한이 없습니다." };
+
+  const { data: game } = await supabase
+    .from("games")
+    .select("id, slug, title, entry_url, thumbnail_url")
+    .eq("id", gameId)
+    .maybeSingle();
+  if (!game) return { ok: false, error: "게임을 찾을 수 없습니다." };
+
+  const { data: removed, error } = await supabase
+    .from("games")
+    .delete()
+    .eq("id", gameId)
+    .select("id");
+  if (error) return { ok: false, error: `삭제 실패: ${error.message}` };
+  if (!removed || removed.length === 0) return { ok: false, error: "게임을 지우지 못했습니다." };
+
+  const files = await removeUploadedBuildIfUnused(supabase, game.entry_url);
+  await removeUploadedImageIfUnused(supabase, game.thumbnail_url);
+
+  revalidatePath("/admin");
+  revalidatePath("/games");
+  revalidatePath(`/games/${game.slug}`);
+  revalidatePath("/");
+
+  let message = `「${game.title}」을 삭제했습니다.`;
+  if (files === "failed") {
+    message += " 다만 저장소의 게임 파일 일부를 지우지 못했습니다.";
+  } else if (files === "kept") {
+    message += " 게임 파일은 다른 게임이 함께 쓰고 있어 남겨 두었습니다.";
+  } else if (files === "none" && game.entry_url?.startsWith("/g/")) {
+    // 명령어로 넣은 게임 — 파일이 코드 저장소 안에 있어서 사이트에서는 지울 수 없습니다.
+    message += ` 게임 파일은 코드 저장소의 public/g/${game.entry_url.split("/")[2]} 폴더에 남아 있습니다.`;
+  }
+  return { ok: true, message };
 }
 
 /**

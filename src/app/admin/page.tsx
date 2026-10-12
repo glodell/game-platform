@@ -58,11 +58,10 @@ export default async function AdminPage() {
       )
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
-    // 썸네일은 공개 전 제출작에도 미리 달아둘 수 있어야 해서 반려 건만 뺍니다.
+    // 게임 관리 목록 — 반려 · 숨김 상태도 지울 수 있어야 해서 상태를 가리지 않고 전부 가져옵니다.
     supabase
       .from("games")
-      .select("id, title, slug, thumbnail_url, status, entry_url")
-      .in("status", ["published", "pending", "draft"])
+      .select("id, title, slug, thumbnail_url, status, entry_url, like_count, comment_count")
       .order("title"),
     // 검토 큐는 최근 것만 봅니다 — 오래된 기록까지 훑을 일은 거의 없습니다.
     supabase

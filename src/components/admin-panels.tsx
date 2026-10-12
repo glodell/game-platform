@@ -7,6 +7,7 @@ import {
   createHackathon,
   createOfficialGame,
   createTournament,
+  deleteGame,
   deleteNote,
   reviewSubmission,
   saveNote,
@@ -108,21 +109,32 @@ export type ThumbGame = {
   slug: string;
   thumbnail_url: string | null;
   status: string;
+  /** 삭제 확인창에 "무엇이 함께 지워지는지" 보여주려고 받습니다. */
+  like_count?: number;
+  comment_count?: number;
 };
 
 export function ThumbnailManager({ games }: { games: ThumbGame[] }) {
   const [query, setQuery] = useState("");
+  // 지운 게임의 줄은 목록에서 사라지므로, 결과는 목록 위에 따로 남깁니다.
+  const [notice, setNotice] = useState<string | null>(null);
   const filtered = query
     ? games.filter((g) => g.title.toLowerCase().includes(query.toLowerCase()))
     : games;
 
   return (
     <section className="mt-12">
-      <h2 className="font-black text-lg mb-2">썸네일</h2>
+      <h2 className="font-black text-lg mb-2">게임 목록</h2>
       <p className="text-sm text-ink-400 mb-4">
-        게임 카드에 쓰이는 이미지입니다. 이미지를 고르면 바로 올라가고 저장됩니다. 비워두면 게임
-        이름으로 만든 그라디언트가 대신 나옵니다. 가로세로 16:10 을 권장합니다.
+        썸네일은 게임 카드에 쓰이는 이미지입니다. 이미지를 고르면 바로 올라가고 저장됩니다.
+        비워두면 게임 이름으로 만든 그라디언트가 대신 나옵니다. 가로세로 16:10 을 권장합니다.
       </p>
+
+      {notice && (
+        <p className="mb-4 rounded-xl border border-lime-glow/40 bg-lime-glow/10 px-4 py-3 text-sm text-lime-glow">
+          {notice}
+        </p>
+      )}
 
       {games.length > 6 && (
         <input
@@ -138,7 +150,7 @@ export function ThumbnailManager({ games }: { games: ThumbGame[] }) {
       ) : (
         <ul className="space-y-3">
           {filtered.map((game) => (
-            <ThumbnailRow key={game.id} game={game} />
+            <ThumbnailRow key={game.id} game={game} onDeleted={setNotice} />
           ))}
         </ul>
       )}
@@ -146,11 +158,46 @@ export function ThumbnailManager({ games }: { games: ThumbGame[] }) {
   );
 }
 
-function ThumbnailRow({ game }: { game: ThumbGame }) {
+function ThumbnailRow({
+  game,
+  onDeleted,
+}: {
+  game: ThumbGame;
+  onDeleted: (message: string) => void;
+}) {
   const [url, setUrl] = useState(game.thumbnail_url ?? "");
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [deleting, startDelete] = useTransition();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const router = useRouter();
+
+  function remove() {
+    const confirmed = window.confirm(
+      [
+        `「${game.title}」을 삭제할까요?`,
+        "",
+        "함께 지워지는 것",
+        "· 이 게임의 랭킹 기록 전부",
+        `· 댓글 ${game.comment_count ?? 0}개, 좋아요 ${game.like_count ?? 0}개`,
+        "· 올린 게임 파일과 썸네일",
+        "",
+        "되돌릴 수 없습니다.",
+      ].join("\n"),
+    );
+    if (!confirmed) return;
+
+    setDeleteError(null);
+    startDelete(async () => {
+      const res = await deleteGame(game.id);
+      if (res.ok) {
+        onDeleted(res.message);
+        router.refresh();
+      } else {
+        setDeleteError(res.error);
+      }
+    });
+  }
 
   const dirty = url.trim() !== (game.thumbnail_url ?? "");
 
@@ -173,7 +220,16 @@ function ThumbnailRow({ game }: { game: ThumbGame }) {
           {game.title}
         </Link>
         {game.status !== "published" && <Badge tone="gold">{game.status}</Badge>}
+        <button
+          type="button"
+          onClick={remove}
+          disabled={deleting || pending}
+          className="ml-auto rounded-lg border border-punch-500/40 text-punch-400 px-3 py-1.5 text-xs font-semibold hover:bg-punch-500/10 transition-colors disabled:opacity-50"
+        >
+          {deleting ? "삭제 중…" : "게임 삭제"}
+        </button>
       </div>
+      {deleteError && <p className="mb-3 text-sm text-punch-400">{deleteError}</p>}
 
       {/* 파일을 고르면 올라간 뒤 바로 저장합니다. 주소를 직접 고치거나 지웠을 때만 저장을 누릅니다. */}
       <ImageField

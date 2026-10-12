@@ -1,12 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { blobObjectUrl, blobUrlOf, removeBlobBuild } from "@/lib/game-blob";
+import { blobObjectUrl, blobUrlOf } from "@/lib/game-blob";
 import {
   isBuildId,
   isGameKey,
   isSafeFilePath,
-  parseUploadedEntry,
   uploadedEntryUrl,
   uploadLimits,
   type GameStore,
@@ -14,12 +13,12 @@ import {
 import {
   ensureGameBucket,
   gameStore,
-  removeGameBuild,
   signGameUploads,
   storageObjectUrl,
   type UploadTicket,
 } from "@/lib/game-storage";
 import { requireStaff } from "@/lib/staff";
+import { removeUploadedBuildIfUnused } from "@/lib/uploaded-builds";
 import { createAdminClient } from "@/lib/supabase/server";
 
 /** 한 번에 받는 파일 목록 크기 — 브라우저가 이 크기로 나눠 부릅니다. */
@@ -183,16 +182,8 @@ async function pointGameAt(
   if (error) return { ok: false, error: `게임 경로를 바꾸지 못했습니다: ${error.message}` };
 
   // 전에 쓰던 빌드는 이제 아무도 가리키지 않으니, 그 빌드가 있던 저장소에서 지웁니다
-  // (저장 공간이 한정돼 있습니다). 실패해도 게임은 이미 새 위치로 돌고 있으므로 조용히 넘어갑니다.
-  const previous = parseUploadedEntry(game.entry_url);
-  if (previous && game.entry_url !== entryUrl) {
-    try {
-      if (previous.store === "blob") await removeBlobBuild(previous.key, previous.build);
-      else await removeGameBuild(createAdminClient(), previous.key, previous.build);
-    } catch (cause) {
-      console.warn("이전 빌드 삭제 실패:", cause);
-    }
-  }
+  // (저장 공간이 한정돼 있습니다). 실패해도 게임은 이미 새 위치로 돌고 있으므로 넘어갑니다.
+  if (game.entry_url !== entryUrl) await removeUploadedBuildIfUnused(supabase, game.entry_url);
 
   revalidatePath("/admin");
   revalidatePath("/games");
