@@ -32,6 +32,28 @@ export function uploadLimits(store: GameStore) {
 /** 이보다 큰 파일은 방문자가 받는 데 오래 걸린다고 알려줍니다. */
 const HEAVY_BYTES = 20 * MB;
 
+/**
+ * 썸네일 · 표지 이미지.
+ *
+ * 게임 빌드와 같은 저장소에, 같은 <키>/<빌드>/<파일> 모양으로 둡니다 (thumbs/<번호>/image.webp).
+ * 그래서 업로드 허가 · 저장소 선택을 게임 폴더 업로드와 그대로 함께 씁니다.
+ */
+export const IMAGE_KEY = "thumbs";
+export const IMAGE_MAX_BYTES = 5 * MB;
+/** 받을 수 있는 이미지 종류 → 저장할 때 쓰는 확장자 */
+export const IMAGE_TYPES: Record<string, string> = {
+  "image/webp": "webp",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/avif": "avif",
+};
+
+/** 이미지 자리에 올릴 수 있는 파일 이름인지 (image.<확장자>) */
+export function isImageFileName(name: string) {
+  return Object.values(IMAGE_TYPES).some((ext) => name === `image.${ext}`);
+}
+
 const KEY = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const BUILD = /^[a-z0-9]{6,24}$/;
 // 저장소가 받는 글자만 허용합니다. 한글 등 그 밖의 글자가 든 이름은 저장소가 거부합니다.
@@ -59,7 +81,8 @@ export function gameKeyFrom(name: string) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48)
     .replace(/-+$/, "");
-  return KEY.test(key) && !BUILD_DIRS.includes(key) ? key : "game";
+  // dist 같은 빌드 폴더 이름과, 이미지가 쓰는 자리는 게임 키로 쓰지 않습니다.
+  return KEY.test(key) && !BUILD_DIRS.includes(key) && key !== IMAGE_KEY ? key : "game";
 }
 
 export function uploadedEntryUrl(store: GameStore, key: string, build: string) {

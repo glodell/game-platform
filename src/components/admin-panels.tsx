@@ -17,6 +17,7 @@ import { linkGameFolder } from "@/app/actions/game-upload";
 import type { GameStore } from "@/lib/game-files";
 import { FEATURES } from "@/lib/site";
 import { GameUploader } from "./game-uploader";
+import { ImageField } from "./image-field";
 import { Badge } from "./ui";
 
 /* ------------------------------------------------------------------ */
@@ -119,8 +120,8 @@ export function ThumbnailManager({ games }: { games: ThumbGame[] }) {
     <section className="mt-12">
       <h2 className="font-black text-lg mb-2">썸네일</h2>
       <p className="text-sm text-ink-400 mb-4">
-        게임 카드에 쓰이는 이미지입니다. 비워두면 게임 이름으로 만든 그라디언트가 대신 나옵니다.
-        가로세로 16:10 을 권장합니다.
+        게임 카드에 쓰이는 이미지입니다. 이미지를 고르면 바로 올라가고 저장됩니다. 비워두면 게임
+        이름으로 만든 그라디언트가 대신 나옵니다. 가로세로 16:10 을 권장합니다.
       </p>
 
       {games.length > 6 && (
@@ -153,77 +154,59 @@ function ThumbnailRow({ game }: { game: ThumbGame }) {
 
   const dirty = url.trim() !== (game.thumbnail_url ?? "");
 
-  function save() {
+  function save(next = url) {
     startTransition(async () => {
-      const res = await setGameThumbnail(game.id, url);
+      const res = await setGameThumbnail(game.id, next);
       setResult({ ok: res.ok, text: res.ok ? res.message : res.error });
       if (res.ok) router.refresh();
     });
   }
 
   return (
-    <li className="panel p-4 flex flex-wrap items-start gap-4">
-      {/* 미리보기는 입력창의 현재 값을 그대로 씁니다 — 저장 전에 확인할 수 있게. */}
-      <div className="w-32 shrink-0 aspect-[16/10] rounded-lg overflow-hidden bg-ink-850 border border-ink-800 grid place-items-center">
-        {url.trim() ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={url.trim()} alt="" className="size-full object-cover" />
-        ) : (
-          <span className="text-2xl opacity-30">🕹️</span>
-        )}
+    <li className="panel p-4">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <Link
+          href={`/games/${game.slug}`}
+          target="_blank"
+          className="font-bold hover:text-neon-400 transition-colors"
+        >
+          {game.title}
+        </Link>
+        {game.status !== "published" && <Badge tone="gold">{game.status}</Badge>}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href={`/games/${game.slug}`}
-            target="_blank"
-            className="font-bold hover:text-neon-400 transition-colors"
-          >
-            {game.title}
-          </Link>
-          {game.status !== "published" && <Badge tone="gold">{game.status}</Badge>}
-        </div>
+      {/* 파일을 고르면 올라간 뒤 바로 저장합니다. 주소를 직접 고치거나 지웠을 때만 저장을 누릅니다. */}
+      <ImageField
+        value={url}
+        onChange={(next) => {
+          setUrl(next);
+          setResult(null);
+        }}
+        onUploaded={save}
+      />
 
-        <input
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value);
-            setResult(null);
-          }}
-          placeholder="https://… 또는 /games/…/thumb.png"
-          className="w-full mt-2 rounded-xl bg-ink-900 border border-ink-700 px-3.5 py-2.5 text-sm outline-none focus:border-neon-400/60 transition-colors"
-        />
-
-        <div className="flex flex-wrap items-center gap-3 mt-2.5">
-          <button
-            type="button"
-            onClick={save}
-            disabled={pending || !dirty}
-            className="rounded-lg bg-ink-100 text-ink-950 px-4 py-2 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-40"
-          >
-            {pending ? "저장 중…" : "저장"}
-          </button>
-          {url.trim() && (
+      {(dirty || pending || result) && (
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          {(dirty || pending) && (
             <button
               type="button"
-              onClick={() => {
-                setUrl("");
-                setResult(null);
-              }}
+              onClick={() => save()}
               disabled={pending}
-              className="text-sm text-ink-400 hover:text-ink-100 transition-colors disabled:opacity-40"
+              className="rounded-lg bg-ink-100 text-ink-950 px-4 py-2 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-40"
             >
-              지우기
+              {pending ? "저장 중…" : "저장"}
             </button>
           )}
-          {result && (
+          {dirty && !pending && (
+            <span className="text-sm text-gold">바뀐 내용이 있습니다 — 저장을 눌러야 반영됩니다.</span>
+          )}
+          {result && !dirty && (
             <span className={`text-sm ${result.ok ? "text-lime-glow" : "text-punch-400"}`}>
               {result.text}
             </span>
           )}
         </div>
-      </div>
+      )}
     </li>
   );
 }
@@ -321,10 +304,14 @@ function GameForm({
   const { state, pending, onSubmit } = useAction(createOfficialGame);
   // 폴더를 올리면 이 칸이 자동으로 채워집니다. 직접 적어도 됩니다.
   const [entryUrl, setEntryUrl] = useState("");
+  const [thumbnail, setThumbnail] = useState("");
 
-  // 등록이 끝나면 폼의 다른 칸처럼 이 칸도 비웁니다.
+  // 등록이 끝나면 폼의 다른 칸처럼 이 칸들도 비웁니다.
   useEffect(() => {
-    if (state?.ok) setEntryUrl("");
+    if (state?.ok) {
+      setEntryUrl("");
+      setThumbnail("");
+    }
   }, [state]);
 
   return (
@@ -360,23 +347,27 @@ function GameForm({
       </Row>
       <Input name="tagline" label="한 줄 소개" />
       <Textarea name="description" label="설명" rows={3} />
-      <Row>
-        <Input
-          name="entry_url"
-          label="게임 경로"
-          placeholder="폴더를 올리면 자동으로 채워집니다"
-          list="game-folders"
-          value={entryUrl}
-          onChange={(event) => setEntryUrl(event.target.value)}
-        />
-        <Input name="thumbnail_url" label="썸네일 URL" placeholder="비우면 자동 생성" />
-      </Row>
+      <Input
+        name="entry_url"
+        label="게임 경로"
+        placeholder="폴더를 올리면 자동으로 채워집니다"
+        list="game-folders"
+        value={entryUrl}
+        onChange={(event) => setEntryUrl(event.target.value)}
+      />
       <Textarea
         name="html"
         label="또는 HTML 코드 직접 붙여넣기"
         rows={6}
         mono
         placeholder="경로를 적었다면 비워두세요"
+      />
+      <ImageField
+        name="thumbnail_url"
+        label="썸네일"
+        value={thumbnail}
+        onChange={setThumbnail}
+        hint="비워두면 게임 이름으로 만든 그라디언트가 대신 나옵니다. 나중에 게임 관리 탭에서 바꿀 수 있습니다."
       />
       <Row>
         <Select name="scoring" label="순위 기준">
@@ -689,6 +680,7 @@ function NoteForm({
   onClose: () => void;
 }) {
   const [state, setState] = useState<AdminResult | null>(null);
+  const [cover, setCover] = useState(note?.cover_url ?? "");
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -725,20 +717,19 @@ function NoteForm({
         defaultValue={note?.summary ?? ""}
         hint="목록 카드와 검색 결과에 나오는 한두 줄 (300자까지)"
       />
-      <Row>
-        <Input
-          name="video_url"
-          label="쇼츠 · 유튜브 주소"
-          defaultValue={note?.video_url ?? ""}
-          placeholder="https://www.youtube.com/shorts/…"
-        />
-        <Input
-          name="cover_url"
-          label="표지 이미지 URL"
-          defaultValue={note?.cover_url ?? ""}
-          placeholder="비우면 영상 썸네일"
-        />
-      </Row>
+      <Input
+        name="video_url"
+        label="쇼츠 · 유튜브 주소"
+        defaultValue={note?.video_url ?? ""}
+        placeholder="https://www.youtube.com/shorts/…"
+      />
+      <ImageField
+        name="cover_url"
+        label="표지 이미지"
+        value={cover}
+        onChange={setCover}
+        hint="비워두면 위에 넣은 영상의 썸네일이 대신 나옵니다."
+      />
       <Select name="game_id" label="연결할 게임" defaultValue={note?.game_id ?? ""}>
         <option value="">연결 안 함</option>
         {games.map((g) => (

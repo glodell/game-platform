@@ -1,6 +1,15 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
-import { isBuildId, isGameKey, isSafeFilePath, uploadLimits } from "@/lib/game-files";
+import {
+  IMAGE_KEY,
+  IMAGE_MAX_BYTES,
+  IMAGE_TYPES,
+  isBuildId,
+  isGameKey,
+  isImageFileName,
+  isSafeFilePath,
+  uploadLimits,
+} from "@/lib/game-files";
 import { requireStaff } from "@/lib/staff";
 
 export const runtime = "nodejs";
@@ -35,7 +44,22 @@ export async function POST(request: Request) {
       body,
       onBeforeGenerateToken: async (pathname) => {
         const [key = "", build = "", ...rest] = pathname.split("/");
-        if (!isGameKey(key) || !isBuildId(build) || !isSafeFilePath(rest.join("/"))) {
+        const file = rest.join("/");
+
+        // 썸네일 · 표지 이미지 자리 — 이미지 파일 하나만, 작은 크기로만 받습니다.
+        if (key === IMAGE_KEY) {
+          if (!isBuildId(build) || !isImageFileName(file)) {
+            throw new Error(`올릴 수 없는 경로입니다: ${pathname}`);
+          }
+          return {
+            addRandomSuffix: false,
+            allowedContentTypes: Object.keys(IMAGE_TYPES),
+            maximumSizeInBytes: IMAGE_MAX_BYTES,
+            cacheControlMaxAge: 31536000,
+          };
+        }
+
+        if (!isGameKey(key) || !isBuildId(build) || !isSafeFilePath(file)) {
           throw new Error(`올릴 수 없는 경로입니다: ${pathname}`);
         }
 
