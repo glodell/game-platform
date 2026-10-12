@@ -7,6 +7,7 @@ import {
   ThumbnailManager,
   type AdminNote,
 } from "@/components/admin-panels";
+import { AdminTabs } from "@/components/admin-tabs";
 import { RunReview, type ReviewRun } from "@/components/run-review";
 import { parseTrace } from "@/lib/run-trace";
 import { formatDate, formatRelative } from "@/lib/format";
@@ -131,6 +132,8 @@ export default async function AdminPage() {
 
   const pending = pendingRows ?? [];
   const hasPending = pending.length > 0;
+  // 탭 이름 옆에 띄울 숫자 — 표시가 달렸고 아직 무효 처리하지 않은 기록
+  const flaggedRuns = reviewRuns.filter((run) => run.flags.length > 0 && !run.voidedAt).length;
 
   const publishedGames = (games ?? []).filter((g) => g.status === "published");
 
@@ -154,51 +157,72 @@ export default async function AdminPage() {
       <h1 className="text-3xl font-black tracking-tight">운영자 콘솔</h1>
       <p className="text-ink-400 mt-2">{tasks.join(", ")}를 여기서 합니다.</p>
 
-      {/* 제출을 받지 않는 동안에도, 이미 들어와 있는 제출작은 처리할 수 있게 남겨둡니다. */}
-      {(FEATURES.community || hasPending) && (
-        <section className="mt-10">
-          <h2 className="font-black text-lg mb-4">
-            검토 대기{" "}
-            {hasPending && <span className="text-gold tabular-nums">{pending.length}</span>}
-          </h2>
-          {!hasPending ? (
-            <p className="panel px-5 py-8 text-center text-sm text-ink-400">
-              대기 중인 제출작이 없습니다.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {pending.map((game) => (
-                <ReviewRow
-                  key={game.id}
-                  game={{
-                    id: game.id,
-                    slug: game.slug,
-                    title: game.title,
-                    tagline: game.tagline,
-                    authorHandle:
-                      (game as unknown as Game).author?.handle ?? "알 수 없음",
-                    createdAt: formatRelative(game.created_at),
-                    isHackathonEntry: Boolean(game.hackathon_id),
-                  }}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+      <AdminTabs
+        tabs={[
+          {
+            key: "new",
+            label: "새 게임",
+            content: (
+              <AdminForms
+                games={publishedGames}
+                allGames={games ?? []}
+                newFolders={newFolders}
+                store={gameStore()}
+              />
+            ),
+          },
+          {
+            key: "manage",
+            label: "게임 관리",
+            badge: pending.length + flaggedRuns,
+            content: (
+              <>
+                {/* 제출을 받지 않는 동안에도, 이미 들어와 있는 제출작은 처리할 수 있게 남겨둡니다. */}
+                {(FEATURES.community || hasPending) && (
+                  <section className="mt-10">
+                    <h2 className="font-black text-lg mb-4">
+                      검토 대기{" "}
+                      {hasPending && <span className="text-gold tabular-nums">{pending.length}</span>}
+                    </h2>
+                    {!hasPending ? (
+                      <p className="panel px-5 py-8 text-center text-sm text-ink-400">
+                        대기 중인 제출작이 없습니다.
+                      </p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {pending.map((game) => (
+                          <ReviewRow
+                            key={game.id}
+                            game={{
+                              id: game.id,
+                              slug: game.slug,
+                              title: game.title,
+                              tagline: game.tagline,
+                              authorHandle:
+                                (game as unknown as Game).author?.handle ?? "알 수 없음",
+                              createdAt: formatRelative(game.created_at),
+                              isHackathonEntry: Boolean(game.hackathon_id),
+                            }}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
 
-      <AdminForms
-        games={publishedGames}
-        allGames={games ?? []}
-        newFolders={newFolders}
-        store={gameStore()}
+                <ThumbnailManager games={games ?? []} />
+
+                <RunReview runs={reviewRuns} />
+              </>
+            ),
+          },
+          {
+            key: "notes",
+            label: "제작 노트",
+            content: <NotesManager notes={notes} games={publishedGames} ready={!notesError} />,
+          },
+        ]}
       />
-
-      <NotesManager notes={notes} games={publishedGames} ready={!notesError} />
-
-      <RunReview runs={reviewRuns} />
-
-      <ThumbnailManager games={games ?? []} />
     </div>
   );
 }
