@@ -55,7 +55,11 @@ export async function listGames(options: {
   hackathonId?: string;
   sort?: "popular" | "recent" | "liked";
   limit?: number;
+  /** 이 게임들만 (예: 랭킹 이벤트가 열린 게임). 빈 배열이면 결과도 비어 있습니다. */
+  ids?: string[];
 } = {}): Promise<Game[]> {
+  if (options.ids && options.ids.length === 0) return [];
+
   const supabase = await createClient();
   let query = supabase.from("games").select(GAME_FIELDS).eq("status", "published");
 
@@ -63,11 +67,23 @@ export async function listGames(options: {
   const kind = FEATURES.community ? options.kind : "official";
   if (kind) query = query.eq("kind", kind);
   if (options.hackathonId) query = query.eq("hackathon_id", options.hackathonId);
+  if (options.ids) query = query.in("id", options.ids);
 
+  // 인기순 = 많이 플레이한 순서, 같으면 좋아요가 많은 쪽. 게임 목록에는 따로 "좋아요순" 을 두지
+  // 않습니다 — 좋아요는 플레이 수보다 훨씬 드물어서 대부분 0 으로 같고, 순서가 인기순과 거의
+  // 겹칩니다. "liked" 는 좋아요가 곧 투표인 해커톤 출품작 목록에서만 씁니다.
   const sort = options.sort ?? "recent";
-  if (sort === "popular") query = query.order("play_count", { ascending: false });
-  else if (sort === "liked") query = query.order("like_count", { ascending: false });
-  else query = query.order("published_at", { ascending: false, nullsFirst: false });
+  if (sort === "popular") {
+    query = query
+      .order("play_count", { ascending: false })
+      .order("like_count", { ascending: false });
+  } else if (sort === "liked") {
+    query = query
+      .order("like_count", { ascending: false })
+      .order("play_count", { ascending: false });
+  } else {
+    query = query.order("published_at", { ascending: false, nullsFirst: false });
+  }
 
   const { data } = await query.limit(options.limit ?? 24);
   return (data as unknown as Game[]) ?? [];
