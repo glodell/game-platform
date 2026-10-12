@@ -61,7 +61,6 @@ export function GameFrame({
   const tokenRef = useRef<string | null>(null);
   const [immersive, setImmersive] = useState(false);
   const [live, setLive] = useState(false);
-  const [liveScore, setLiveScore] = useState<number | null>(null);
   const [submit, setSubmit] = useState<SubmitState>({ kind: "idle" });
   const [fetchingToken, setFetchingToken] = useState(false);
 
@@ -121,8 +120,6 @@ export function GameFrame({
       meta: Record<string, unknown>,
       trace: unknown,
     ) => {
-      setLiveScore(score);
-
       if (!viewer) {
         setSubmit({ kind: "error", message: "로그인하면 이 점수가 랭킹에 올라갑니다." });
         postResult({ ok: false, reason: "guest" });
@@ -231,15 +228,11 @@ export function GameFrame({
         case "START":
           setLive(true);
           setSubmit({ kind: "idle" });
-          setLiveScore(null);
           void primeToken();
           break;
-        case "PROGRESS":
-          setLiveScore(Number(data.payload?.score) || 0);
-          break;
+        // PROGRESS(진행 중 점수)는 받아도 쓰지 않습니다 — 점수는 게임 화면에 이미 나옵니다.
         case "RESTART":
           setSubmit({ kind: "idle" });
-          setLiveScore(null);
           void primeToken();
           break;
         case "GAME_OVER":
@@ -316,16 +309,9 @@ export function GameFrame({
         />
 
         {/*
-          게임 위에 겹쳐 놓는 것들은 누를 수 없게 합니다(pointer-events-none). 그대로 두면 그 자리를
-          누른 손가락이 게임에 닿지 않아 조작이 씹히고, 이 페이지가 대신 받아 확대 동작으로 처리합니다.
-          닫기 버튼만 예외입니다.
+          진행 중인 점수는 여기서 따로 띄우지 않습니다 — 게임이 자기 화면에 이미 보여주므로 같은
+          숫자가 두 번 나옵니다. 게임 위에는 전체화면 버튼과 (전체화면일 때) 안내 막대만 얹습니다.
         */}
-        {live && liveScore !== null && (
-          <div className="pointer-events-none absolute top-3 left-3 z-10 rounded-lg bg-ink-950/80 border border-ink-700 px-3 py-1.5 text-sm font-bold tabular-nums backdrop-blur">
-            {formatScore(liveScore, scoreUnit)}
-          </div>
-        )}
-
         <button
           type="button"
           onClick={immersive ? exitImmersive : enterImmersive}
@@ -339,6 +325,8 @@ export function GameFrame({
         {/*
           전체화면의 안내 막대는 판이 진행 중일 때는 숨깁니다. 폰에서는 화면 아래를 거의 다 덮는데,
           거기가 엄지가 가장 자주 닿는 자리입니다. 시작 전 안내와 끝난 뒤 결과만 보여주면 됩니다.
+          누를 수도 없게 합니다(pointer-events-none) — 그대로 두면 그 자리를 누른 손가락이 게임에
+          닿지 않아 조작이 씹히고, 이 페이지가 대신 받아 확대 동작으로 처리합니다.
         */}
         {immersive && !live && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-3">
