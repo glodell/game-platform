@@ -9,6 +9,7 @@ import {
 } from "@/lib/game-files";
 import { ensureGameBucket, gameStore, signGameUploads, storageObjectUrl } from "@/lib/game-storage";
 import { requireStaff } from "@/lib/staff";
+import { removeUploadedImageIfUnused } from "@/lib/uploaded-images";
 import { createAdminClient } from "@/lib/supabase/server";
 
 export type StartImageUploadResult =
@@ -63,4 +64,17 @@ export async function startImageUpload(input: {
   if ("error" in signed) return { ok: false, error: signed.error };
 
   return { ok: true, store, path, token: signed.tickets[0].token, url: storageObjectUrl(path) };
+}
+
+/**
+ * 올렸지만 쓰지 않게 된 이미지를 정리합니다.
+ *
+ * 이미지 칸에서 다른 그림으로 바꾸거나 지울 때 부릅니다. 게임이나 노트가 아직 그 주소를
+ * 쓰고 있으면 아무것도 지우지 않으므로(저장된 그림은 저장할 때 정리됩니다), 화면 쪽에서는
+ * "이 그림이 저장된 것인지" 따지지 않고 불러도 안전합니다.
+ */
+export async function discardUploadedImage(url: string): Promise<void> {
+  const { supabase, staff } = await requireStaff();
+  if (!staff) return;
+  await removeUploadedImageIfUnused(supabase, url);
 }

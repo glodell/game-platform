@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { discardUploadedImage } from "@/app/actions/image-upload";
 import { uploadImage } from "@/lib/upload-image";
 
 /**
@@ -39,13 +40,23 @@ export function ImageField({
     setError(null);
     try {
       const url = await uploadImage(file);
-      onChange(url);
+      replace(url);
       onUploaded?.(url);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "이미지를 올리지 못했습니다.");
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * 칸의 그림을 바꾸거나 비웁니다. 밀려난 그림은 서버에 정리를 맡깁니다 — 게임이나 노트가
+   * 아직 쓰고 있는 그림은 서버가 남겨 두므로, 저장 전에 올려 본 그림만 지워집니다.
+   */
+  function replace(next: string) {
+    const previous = value.trim();
+    onChange(next);
+    if (previous && previous !== next) void discardUploadedImage(previous).catch(() => {});
   }
 
   const shown = value.trim();
@@ -76,7 +87,7 @@ export function ImageField({
             {shown && !busy && (
               <button
                 type="button"
-                onClick={() => onChange("")}
+                onClick={() => replace("")}
                 className="text-sm text-ink-400 hover:text-ink-100 transition-colors"
               >
                 지우기

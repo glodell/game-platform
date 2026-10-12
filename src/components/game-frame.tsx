@@ -269,13 +269,19 @@ export function GameFrame({
   return (
     <div
       ref={wrapRef}
-      className={immersive ? "fixed inset-0 z-[60] bg-black" : "space-y-3"}
+      // 전체화면에서는 브라우저의 확대 동작(두 번 누르기 · 두 손가락 벌리기)을 끕니다. 빠르게
+      // 연타하는 게임에서 브라우저가 그걸 확대로 받아들이면 화면 전체가 커졌다 돌아오며 덜컥거립니다.
+      // 스크롤(pan)은 남겨 둡니다 — 게임 안에 밀어서 보는 화면이 있을 수 있습니다.
+      className={
+        immersive ? "fixed inset-0 z-[60] bg-black select-none touch-pan-x touch-pan-y" : "space-y-3"
+      }
     >
       <div
         className={
           immersive
             ? "absolute inset-0"
-            : "relative rounded-2xl overflow-hidden border border-ink-700 bg-black aspect-[4/3] sm:aspect-video"
+            : // 페이지 안에 놓였을 때는 두 번 누르기 확대만 끕니다 (페이지 자체의 확대는 그대로).
+              "relative rounded-2xl overflow-hidden border border-ink-700 bg-black aspect-[4/3] sm:aspect-video touch-manipulation"
         }
       >
         <iframe
@@ -288,8 +294,13 @@ export function GameFrame({
           {...(srcDoc ? { srcDoc } : { src: entryUrl ?? "about:blank" })}
         />
 
+        {/*
+          게임 위에 겹쳐 놓는 것들은 누를 수 없게 합니다(pointer-events-none). 그대로 두면 그 자리를
+          누른 손가락이 게임에 닿지 않아 조작이 씹히고, 이 페이지가 대신 받아 확대 동작으로 처리합니다.
+          닫기 버튼만 예외입니다.
+        */}
         {live && liveScore !== null && (
-          <div className="absolute top-3 left-3 z-10 rounded-lg bg-ink-950/80 border border-ink-700 px-3 py-1.5 text-sm font-bold tabular-nums backdrop-blur">
+          <div className="pointer-events-none absolute top-3 left-3 z-10 rounded-lg bg-ink-950/80 border border-ink-700 px-3 py-1.5 text-sm font-bold tabular-nums backdrop-blur">
             {formatScore(liveScore, scoreUnit)}
           </div>
         )}
@@ -299,14 +310,18 @@ export function GameFrame({
           onClick={immersive ? exitImmersive : enterImmersive}
           aria-label={immersive ? "전체화면 나가기" : "전체화면으로 보기"}
           title={immersive ? "전체화면 나가기 (Esc)" : "전체화면"}
-          className="absolute top-3 right-3 z-10 grid size-10 place-items-center rounded-lg bg-ink-950/80 border border-ink-700 text-ink-300 hover:text-ink-100 hover:border-ink-600 backdrop-blur transition-colors"
+          className="absolute top-3 right-3 z-10 grid size-10 place-items-center rounded-lg bg-ink-950/80 border border-ink-700 text-ink-300 hover:text-ink-100 hover:border-ink-600 backdrop-blur transition-colors touch-manipulation"
         >
           {immersive ? <CloseIcon /> : <ExpandIcon />}
         </button>
 
-        {immersive && (
-          <div className="absolute inset-x-0 bottom-0 z-10 p-3 pointer-events-none">
-            <div className="mx-auto max-w-2xl pointer-events-auto">{statusBar}</div>
+        {/*
+          전체화면의 안내 막대는 판이 진행 중일 때는 숨깁니다. 폰에서는 화면 아래를 거의 다 덮는데,
+          거기가 엄지가 가장 자주 닿는 자리입니다. 시작 전 안내와 끝난 뒤 결과만 보여주면 됩니다.
+        */}
+        {immersive && !live && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-3">
+            <div className="mx-auto max-w-2xl">{statusBar}</div>
           </div>
         )}
       </div>

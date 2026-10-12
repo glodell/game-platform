@@ -31,6 +31,20 @@
   var HOST = "arcade-host";
   var GAME = "arcade-game";
 
+  /* ---------------- 두 번 누르기 확대 끄기 ---------------- */
+
+  // 빠르게 연타하면 모바일 브라우저가 "두 번 누르기 = 확대" 로 받아들여 화면이 커졌다 돌아오며
+  // 덜컥거립니다. manipulation 은 그 확대만 끄고 스크롤은 그대로 둡니다.
+  // 문서 맨 앞에 규칙으로 넣기 때문에, 게임이 자기 CSS 로 정한 값(none 등)이 있으면 그쪽이 이깁니다.
+  try {
+    var touchStyle = document.createElement("style");
+    touchStyle.textContent = "html{touch-action:manipulation}";
+    var styleHost = document.head || document.documentElement;
+    styleHost.insertBefore(touchStyle, styleHost.firstChild);
+  } catch (e) {
+    /* 스타일을 넣지 못해도 게임은 그대로 돕니다 */
+  }
+
   var startedAt = null;
   var startedPerf = null;
   var configCbs = [];

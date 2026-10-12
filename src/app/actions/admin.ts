@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/staff";
+import { removeUploadedImageIfUnused } from "@/lib/uploaded-images";
 import { parseYouTube } from "@/lib/youtube";
 
 export type AdminResult = { ok: true; message: string } | { ok: false; error: string };
@@ -82,6 +83,13 @@ export async function setGameThumbnail(gameId: string, rawUrl: string): Promise<
     if (url.length > 2000) return { ok: false, error: "주소가 너무 깁니다." };
   }
 
+  // 바꾸기 전의 그림 — 우리가 올린 파일이면 저장한 뒤에 저장소에서 지웁니다.
+  const { data: before } = await supabase
+    .from("games")
+    .select("thumbnail_url")
+    .eq("id", gameId)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from("games")
     .update({ thumbnail_url: url || null })
@@ -90,6 +98,10 @@ export async function setGameThumbnail(gameId: string, rawUrl: string): Promise<
     .single();
 
   if (error) return { ok: false, error: `저장 실패: ${error.message}` };
+
+  if (before?.thumbnail_url && before.thumbnail_url !== url) {
+    await removeUploadedImageIfUnused(supabase, before.thumbnail_url);
+  }
 
   revalidatePath("/admin");
   revalidatePath("/games");
@@ -324,7 +336,7 @@ export async function saveNote(formData: FormData): Promise<AdminResult> {
   if (id) {
     const { data: existing, error: readError } = await supabase
       .from("notes")
-      .select("slug, published_at")
+      .select("slug, published_at, cover_url")
       .eq("id", id)
       .maybeSingle();
     if (isMissingTable(readError)) return NOTES_NOT_READY;
@@ -338,6 +350,10 @@ export async function saveNote(formData: FormData): Promise<AdminResult> {
       .eq("id", id));
 
     if (!error && slug !== existing.slug) revalidatePath(`/notes/${existing.slug}`);
+    // 표지를 바꾸거나 지웠으면, 전에 쓰던 그림(우리가 올린 파일일 때)은 저장소에서 지웁니다.
+    if (!error && existing.cover_url && existing.cover_url !== coverUrl) {
+      await removeUploadedImageIfUnused(supabase, existing.cover_url);
+    }
   } else {
     slug = slugify(slugInput || title, "note");
     ({ error } = await supabase
@@ -368,10 +384,13 @@ export async function deleteNote(noteId: string): Promise<AdminResult> {
     .from("notes")
     .delete()
     .eq("id", noteId)
-    .select("slug")
+    .select("slug, cover_url")
     .maybeSingle();
 
   if (error) return { ok: false, error: `삭제 실패: ${error.message}` };
+
+  // 노트와 함께 표지 그림도 정리합니다.
+  if (data?.cover_url) await removeUploadedImageIfUnused(supabase, data.cover_url);
 
   revalidatePath("/admin");
   revalidatePath("/notes");
