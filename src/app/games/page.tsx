@@ -13,9 +13,12 @@ const KINDS = [
   { value: "community", label: "구독자 제작" },
 ] as const;
 
+// "이벤트" 는 정렬이 아니라 랭킹 이벤트가 열린 게임만 추려 보는 것이지만, 고르는 쪽에서는
+// 최신순 · 인기순과 나란히 놓인 단추 하나면 충분합니다.
 const SORTS = [
   { value: "recent", label: "최신순" },
   { value: "popular", label: "인기순" },
+  { value: "event", label: "이벤트" },
 ] as const;
 
 export default async function GamesPage({
@@ -29,28 +32,29 @@ export default async function GamesPage({
     FEATURES.community && (params.kind === "official" || params.kind === "community")
       ? params.kind
       : undefined;
-  // 예전의 "좋아요순" 주소(?sort=liked)는 인기순으로 받습니다 — 둘을 하나로 합쳤습니다.
-  const sort = params.sort === "popular" || params.sort === "liked" ? "popular" : "recent";
-  // 랭킹 이벤트가 열려 있는 게임만 보기
-  const eventOnly = params.event === "1";
+  // 예전 주소도 받습니다 — 좋아요순(?sort=liked)은 인기순에 합쳤고, ?event=1 은 이벤트 보기였습니다.
+  const sort =
+    params.sort === "event" || params.event === "1"
+      ? "event"
+      : params.sort === "popular" || params.sort === "liked"
+        ? "popular"
+        : "recent";
 
   // 이벤트 중인 게임 목록은 카드 표시에도 쓰여서 항상 읽습니다.
   const eventGamesPromise = listLiveEventGameIds();
   const [games, eventGames] = await Promise.all([
-    eventOnly
-      ? eventGamesPromise.then((ids) => listGames({ kind, sort, limit: 60, ids: [...ids] }))
+    sort === "event"
+      ? eventGamesPromise.then((ids) => listGames({ kind, limit: 60, ids: [...ids] }))
       : listGames({ kind, sort, limit: 60 }),
     eventGamesPromise,
   ]);
 
-  function href(next: { kind?: string; sort?: string; event?: boolean }) {
+  function href(next: { kind?: string; sort?: string }) {
     const sp = new URLSearchParams();
     const k = next.kind !== undefined ? next.kind : (kind ?? "");
     const s = next.sort !== undefined ? next.sort : sort;
-    const e = next.event !== undefined ? next.event : eventOnly;
     if (k) sp.set("kind", k);
     if (s && s !== "recent") sp.set("sort", s);
-    if (e) sp.set("event", "1");
     const qs = sp.toString();
     return qs ? `/games?${qs}` : "/games";
   }
@@ -81,22 +85,13 @@ export default async function GamesPage({
             </Chip>
           ))}
         </FilterGroup>
-        <FilterGroup label="이벤트">
-          {/* 켜고 끄는 단추 — 다시 누르면 전체 목록으로 돌아갑니다. */}
-          <Chip href={href({ event: !eventOnly })} active={eventOnly}>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="live-dot size-1.5 rounded-full bg-punch-400" />
-              이벤트 중{eventGames.size > 0 && ` ${eventGames.size}`}
-            </span>
-          </Chip>
-        </FilterGroup>
       </div>
 
-      {games.length === 0 && eventOnly ? (
+      {games.length === 0 && sort === "event" ? (
         <EmptyState
           title="지금 진행 중인 랭킹 이벤트가 없습니다"
           description="이벤트가 열리면 이곳과 게임 카드에 표시됩니다."
-          action={{ href: href({ event: false }), label: "전체 게임 보기" }}
+          action={{ href: href({ sort: "recent" }), label: "전체 게임 보기" }}
         />
       ) : games.length === 0 ? (
         FEATURES.community ? (
